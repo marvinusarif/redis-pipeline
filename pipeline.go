@@ -1,7 +1,6 @@
 package redispipeline
 
 import (
-	"fmt"
 	"sync"
 	"time"
 
@@ -113,17 +112,18 @@ func NewRedisPipeline(interval int, pool *redigo.Pool, maxConn int, maxBatch uin
 	})
 	return rb
 }
-func (rb *RedisPipelineImpl) createFlushers() {
-	for i := 0; i < rb.maxConn; i++ {
-		go rb.newFlusher(rb.flushChan)
-	}
-}
 
 func (rb *RedisPipelineImpl) NewSession() RedisPipelineSession {
 	return &RedisPipelineSessionImpl{
 		pipelineHub:  rb,
 		responseChan: make(chan *Response),
 		commands:     make([]*Command, 0),
+	}
+}
+
+func (rb *RedisPipelineImpl) createFlushers() {
+	for i := 0; i < rb.maxConn; i++ {
+		go rb.newFlusher(rb.flushChan)
 	}
 }
 
@@ -134,7 +134,6 @@ func (rb *RedisPipelineImpl) newFlusher(flushChan chan []*Command) {
 }
 
 func (rb *RedisPipelineImpl) flush(redisCommands []*Command) {
-	fmt.Println("flush!!")
 	var sentCommands []*Command
 	conn := rb.pool.Get()
 	defer conn.Close()
