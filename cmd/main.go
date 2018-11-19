@@ -30,7 +30,10 @@ func main() {
 		},
 	}
 
-	rb := redispipeline.NewRedisPipeline(1000, pool, 3, 100)
+	interval := 1000
+	maxConn := 3
+	maxCommandsBatch := uint64(1000)
+	rb := redispipeline.NewRedisPipeline(interval, pool, maxConn, maxCommandsBatch)
 
 	for i := 0; i < 300000; i++ {
 		go func(i int) {
