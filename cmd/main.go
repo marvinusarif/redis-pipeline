@@ -30,9 +30,7 @@ func main() {
 		},
 	}
 
-	rb := redispipeline.InitRedisPipeline(1000, pool, 3, 100)
-
-	log.Println("BEGIN RUNNING COMMAND")
+	rb := redispipeline.NewRedisPipeline(1000, pool, 3, 100)
 
 	for i := 0; i < 300000; i++ {
 		go func(i int) {
@@ -43,6 +41,9 @@ func main() {
 				PushCommand("INCR", fmt.Sprintf("testC")).
 				Execute()
 
+			/*
+			   Need to cast the response and error accordingly in sequential order
+			*/
 			// for _, resp := range resps {
 			// 	if resp.Err != nil {
 			// 		log.Println(resp.Err)
@@ -68,106 +69,4 @@ func main() {
 	case <-term:
 		log.Println("terminate app")
 	}
-	//redigo.Bool()
-	//log.Println(resp)
-
-	/* resp, err = rp.PushCommand("SADD", "set_1", "haha")
-	if err != nil {
-		log.Println(err)
-	}
-	log.Println(resp)
-
-	resp, err = rp.PushCommand("SADD", "set_1", "bro")
-	if err != nil {
-		log.Println(err)
-	}
-	log.Println(resp)
-
-	resp, err = rp.PushCommand("SISMEMBER", "set_1", "bro")
-	if err != nil {
-		log.Println(err)
-	}
-	log.Println(resp)
-
-	resp, err = rp.PushCommand("SMEMBERS", "set_1")
-	if err != nil {
-		log.Println(err)
-	}
-	log.Println(resp)
-
-	resp, err = rp.PushCommand("SADD", "set_1", "asdadsa")
-	if err != nil {
-		log.Println(err)
-	}
-	log.Println(resp)
-
-	resp, err = rp.PushCommand("SADD", "set_1", "asdadsa")
-	if err != nil {
-		log.Println(err)
-	}
-	log.Println(resp)
-
-	resp, err = rp.PushCommand("SET", "string_1", "aaa")
-	if err != nil {
-		log.Println(err)
-	}
-	log.Println(resp)
-
-	resp, err = rp.PushCommand("GET", "string_1")
-	if err != nil {
-		log.Println(err)
-	}
-	log.Println(resp)
-
-	resp, err = rp.PushCommand("SET", "string_1", "bbbb")
-	if err != nil {
-		log.Println(err)
-	}
-	log.Println(resp)
-
-	resp, err = rp.PushCommand("GET", "string_1")
-	if err != nil {
-		log.Println(err)
-	}
-	log.Println(resp)
-
-	resp, err = rp.PushCommand("SET", "string_1", "cccc")
-	if err != nil {
-		log.Println(err)
-	}
-	log.Println(resp)
-
-	resp, err = rp.PushCommand("HSET", "hash_1", "field_1", "hello")
-	if err != nil {
-		log.Println(err)
-	}
-	log.Println(resp)
-
-	resp, err = rp.PushCommand("HSET", "hash_1", "field_2", "darkness")
-	if err != nil {
-		log.Println(err)
-	}
-	log.Println(resp)
-
-	resp, err = rp.PushCommand("HGETALL", "hash_1")
-	if err != nil {
-		log.Println(err)
-	}
-	log.Println(resp)
-
-	resp, err = rp.PushCommand("HSET", "hash_1", "field_1", "my")
-	if err != nil {
-		log.Println(err)
-	}
-	log.Println(resp)
-
-	resp, err = rp.PushCommand("HSET", "hash_1", "field_1", "old")
-	if err != nil {
-		log.Println(err)
-	}
-	log.Println(resp) */
-
-	log.Println("END RUNNING COMMAND")
-
-	//time.Sleep(10 * time.Second)
 }
