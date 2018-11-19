@@ -68,7 +68,7 @@ func NewRedisPipeline(pool *redigo.Pool, maxConn int, maxInterval int, maxComman
 			pool:                pool,
 			maxConn:             maxConn,
 			maxCommandsPerBatch: maxCommandsPerBatch,
-			commandsChan:        make(chan []*Command, int(maxCommandsPerBatch)/maxConn),
+			commandsChan:        make(chan []*Command, int(maxCommandsPerBatch)*10/(maxConn*maxInterval)),
 			flushChan:           make(chan []*Command, maxConn),
 		}
 
