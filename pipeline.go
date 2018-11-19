@@ -51,7 +51,7 @@ type RedisPipelineImpl struct {
 
 var once sync.Once
 
-func InitRedisPipeline(interval int, pool *redigo.Pool, maxConn int, maxBatch uint64) RedisPipeline {
+func NewRedisPipeline(interval int, pool *redigo.Pool, maxConn int, maxBatch uint64) RedisPipeline {
 	var rb *RedisPipelineImpl
 
 	once.Do(func() {
@@ -181,7 +181,7 @@ func (ps *RedisPipelineSessionImpl) PushCommand(command string, args ...interfac
 	cmd := &Command{
 		commandName: command,
 		args:        args,
-		//copy response channel from pipeline session to command
+		//copy response channel from pipeline session to command response channel - it will share the same address
 		responseChan: ps.responseChan,
 	}
 	ps.commands = append(ps.commands, cmd)
