@@ -1,6 +1,7 @@
-package util
+package redispipeline
 
 import (
+	"fmt"
 	"sync"
 	"time"
 
@@ -14,18 +15,29 @@ const (
 )
 
 type RedisPipeline interface {
-	PushCommand(command string, args ...interface{}) (interface{}, error)
+	NewSession() RedisPipelineSession
+}
+
+type RedisPipelineSession interface {
+	PushCommand(command string, args ...interface{}) RedisPipelineSession
+	Execute() []*Response
 }
 
 type Command struct {
-	commandName string
-	args        []interface{}
-	response    chan *Response
+	responseChan chan *Response
+	commandName  string
+	args         []interface{}
 }
 
 type Response struct {
-	value interface{}
-	err   error
+	Value interface{}
+	Err   error
+}
+
+type RedisPipelineSessionImpl struct {
+	pipelineHub  *RedisPipelineImpl
+	responseChan chan *Response
+	commands     []*Command
 }
 
 type RedisPipelineImpl struct {
@@ -33,7 +45,7 @@ type RedisPipelineImpl struct {
 	pool       *redigo.Pool
 	maxConn    int
 	maxBatch   uint64
-	redisParam chan *Command
+	redisParam chan []*Command
 	flushChan  chan []*Command
 }
 
@@ -57,7 +69,7 @@ func InitRedisPipeline(interval int, pool *redigo.Pool, maxConn int, maxBatch ui
 			pool:       pool,
 			maxConn:    maxConn,
 			maxBatch:   maxBatch,
-			redisParam: make(chan *Command, maxBatch),
+			redisParam: make(chan []*Command, maxBatch),
 			flushChan:  make(chan []*Command, maxConn),
 		}
 
@@ -76,8 +88,8 @@ func InitRedisPipeline(interval int, pool *redigo.Pool, maxConn int, maxBatch ui
 			for {
 				select {
 				case newRedisCommand := <-rb.redisParam:
-					redisCommands = append(redisCommands, newRedisCommand)
-					commandCounter++
+					redisCommands = append(redisCommands, newRedisCommand...)
+					commandCounter += uint64(len(newRedisCommand))
 					if commandCounter >= rb.maxBatch {
 						go rb.forceToFlush(forcedToFlush)
 					}
@@ -104,16 +116,12 @@ func InitRedisPipeline(interval int, pool *redigo.Pool, maxConn int, maxBatch ui
 	return rb
 }
 
-func (rb *RedisPipelineImpl) PushCommand(command string, args ...interface{}) (interface{}, error) {
-	redisParam := &Command{
-		commandName: command,
-		args:        args,
-		response:    make(chan *Response, 1),
+func (rb *RedisPipelineImpl) NewSession() RedisPipelineSession {
+	return &RedisPipelineSessionImpl{
+		pipelineHub:  rb,
+		responseChan: make(chan *Response),
+		commands:     make([]*Command, 0),
 	}
-	go rb.sendToBuffer(redisParam)
-	//wait until get response
-	redisResponse := <-redisParam.response
-	return redisResponse.value, redisResponse.err
 }
 
 func (rb *RedisPipelineImpl) newFlusher(flushChan chan []*Command) {
@@ -123,13 +131,14 @@ func (rb *RedisPipelineImpl) newFlusher(flushChan chan []*Command) {
 }
 
 func (rb *RedisPipelineImpl) flush(redisCommands []*Command) {
+	fmt.Println("flush!!")
 	var sentCommands []*Command
 	conn := rb.pool.Get()
 	defer conn.Close()
 
 	for _, cmd := range redisCommands {
 		if err := conn.Send(cmd.commandName, cmd.args...); err != nil {
-			go rb.reply(cmd, nil, err)
+			rb.reply(cmd, nil, err)
 		} else {
 			sentCommands = append(sentCommands, cmd)
 		}
@@ -138,16 +147,16 @@ func (rb *RedisPipelineImpl) flush(redisCommands []*Command) {
 	err := conn.Flush()
 	if err != nil {
 		for _, cmd := range sentCommands {
-			go rb.reply(cmd, nil, err)
+			rb.reply(cmd, nil, err)
 		}
 	}
 
 	for _, cmd := range sentCommands {
 		resp, err := conn.Receive()
 		if err != nil {
-			go rb.reply(cmd, nil, err)
+			rb.reply(cmd, nil, err)
 		} else {
-			go rb.reply(cmd, resp, nil)
+			rb.reply(cmd, resp, nil)
 		}
 	}
 }
@@ -156,8 +165,8 @@ func (rb *RedisPipelineImpl) forceToFlush(forcedToFlush chan bool) {
 	forcedToFlush <- true
 }
 
-func (rb *RedisPipelineImpl) sendToBuffer(redisParam *Command) {
-	rb.redisParam <- redisParam
+func (rb *RedisPipelineImpl) sendToPipelineHub(redisParams []*Command) {
+	rb.redisParam <- redisParams
 }
 
 func (rb *RedisPipelineImpl) sendToFlusher(redisCommands []*Command) {
@@ -165,5 +174,30 @@ func (rb *RedisPipelineImpl) sendToFlusher(redisCommands []*Command) {
 }
 
 func (rb *RedisPipelineImpl) reply(cmd *Command, resp interface{}, err error) {
-	cmd.response <- &Response{resp, nil}
+	cmd.responseChan <- &Response{resp, nil}
+}
+
+func (ps *RedisPipelineSessionImpl) PushCommand(command string, args ...interface{}) RedisPipelineSession {
+	cmd := &Command{
+		commandName: command,
+		args:        args,
+		//copy response channel from pipeline session to command
+		responseChan: ps.responseChan,
+	}
+	ps.commands = append(ps.commands, cmd)
+	return ps
+}
+
+func (ps *RedisPipelineSessionImpl) Execute() []*Response {
+	go ps.pipelineHub.sendToPipelineHub(ps.commands)
+	return ps.waitResponse()
+}
+
+func (ps *RedisPipelineSessionImpl) waitResponse() []*Response {
+	var responses []*Response
+	for i := 0; i < len(ps.commands); i++ {
+		responses = append(responses, <-ps.responseChan)
+	}
+	close(ps.responseChan)
+	return responses
 }
