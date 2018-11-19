@@ -116,7 +116,7 @@ func NewRedisPipeline(pool *redigo.Pool, maxConn int, maxInterval int, maxBatch 
 func (rb *RedisPipelineImpl) NewSession() RedisPipelineSession {
 	return &RedisPipelineSessionImpl{
 		pipelineHub:  rb,
-		responseChan: make(chan *Response),
+		responseChan: nil,
 		commands:     make([]*Command, 0),
 	}
 }
@@ -191,6 +191,7 @@ func (ps *RedisPipelineSessionImpl) PushCommand(command string, args ...interfac
 }
 
 func (ps *RedisPipelineSessionImpl) Execute() []*Response {
+	ps.responseChan = make(chan *Response, len(ps.commands))
 	go ps.pipelineHub.sendToPipelineHub(ps.commands)
 	return ps.waitResponse()
 }
