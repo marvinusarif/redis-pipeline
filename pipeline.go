@@ -8,9 +8,9 @@ import (
 )
 
 const (
-	DEFAULT_INTERVAL  int    = 1000
-	DEFAULT_MAX_CONN  int    = 10
-	DEFAULT_MAX_BATCH uint64 = 100000
+	DEFAULT_MAX_INTERVAL int    = 1000
+	DEFAULT_MAX_CONN     int    = 10
+	DEFAULT_MAX_BATCH    uint64 = 100000
 )
 
 type RedisPipeline interface {
@@ -50,12 +50,12 @@ type RedisPipelineImpl struct {
 
 var once sync.Once
 
-func NewRedisPipeline(interval int, pool *redigo.Pool, maxConn int, maxBatch uint64) RedisPipeline {
+func NewRedisPipeline(pool *redigo.Pool, maxConn int, maxInterval int, maxBatch uint64) RedisPipeline {
 	var rb *RedisPipelineImpl
 
 	once.Do(func() {
-		if interval < 1 {
-			interval = DEFAULT_INTERVAL
+		if maxInterval < 1 {
+			maxInterval = DEFAULT_MAX_INTERVAL
 		}
 		if maxConn < 1 {
 			maxConn = DEFAULT_MAX_CONN
@@ -64,7 +64,7 @@ func NewRedisPipeline(interval int, pool *redigo.Pool, maxConn int, maxBatch uin
 			maxBatch = DEFAULT_MAX_BATCH
 		}
 		rb = &RedisPipelineImpl{
-			interval:   time.Duration(interval) * time.Millisecond,
+			interval:   time.Duration(maxInterval) * time.Millisecond,
 			pool:       pool,
 			maxConn:    maxConn,
 			maxBatch:   maxBatch,
