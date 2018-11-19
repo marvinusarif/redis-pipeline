@@ -177,7 +177,7 @@ func (rb *RedisPipelineImpl) sendToFlusher(redisCommands []*Command) {
 }
 
 func (rb *RedisPipelineImpl) reply(cmd *Command, resp interface{}, err error) {
-	cmd.responseChan <- &Response{resp, nil}
+	cmd.responseChan <- &Response{resp, err}
 }
 
 func (ps *RedisPipelineSessionImpl) PushCommand(command string, args ...interface{}) RedisPipelineSession {
