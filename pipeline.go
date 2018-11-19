@@ -8,9 +8,9 @@ import (
 )
 
 const (
-	DEFAULT_MAX_INTERVAL int    = 1000
-	DEFAULT_MAX_CONN     int    = 10
-	DEFAULT_MAX_BATCH    uint64 = 100000
+	DEFAULT_MAX_INTERVAL          int    = 1000
+	DEFAULT_MAX_CONN              int    = 10
+	DEFAULT_MAX_COMMAND_PER_BATCH uint64 = 100000
 )
 
 type RedisPipeline interface {
@@ -40,17 +40,17 @@ type RedisPipelineSessionImpl struct {
 }
 
 type RedisPipelineImpl struct {
-	interval   time.Duration
-	pool       *redigo.Pool
-	maxConn    int
-	maxBatch   uint64
-	redisParam chan []*Command
-	flushChan  chan []*Command
+	interval            time.Duration
+	pool                *redigo.Pool
+	maxConn             int
+	maxCommandsPerBatch uint64
+	commandsChan        chan []*Command
+	flushChan           chan []*Command
 }
 
 var once sync.Once
 
-func NewRedisPipeline(pool *redigo.Pool, maxConn int, maxInterval int, maxBatch uint64) RedisPipeline {
+func NewRedisPipeline(pool *redigo.Pool, maxConn int, maxInterval int, maxCommandsPerBatch uint64) RedisPipeline {
 	var rb *RedisPipelineImpl
 
 	once.Do(func() {
@@ -60,16 +60,16 @@ func NewRedisPipeline(pool *redigo.Pool, maxConn int, maxInterval int, maxBatch 
 		if maxConn < 1 {
 			maxConn = DEFAULT_MAX_CONN
 		}
-		if maxBatch < 1 {
-			maxBatch = DEFAULT_MAX_BATCH
+		if maxCommandsPerBatch < 1 {
+			maxCommandsPerBatch = DEFAULT_MAX_COMMAND_PER_BATCH
 		}
 		rb = &RedisPipelineImpl{
-			interval:   time.Duration(maxInterval) * time.Millisecond,
-			pool:       pool,
-			maxConn:    maxConn,
-			maxBatch:   maxBatch,
-			redisParam: make(chan []*Command, maxBatch),
-			flushChan:  make(chan []*Command, maxConn),
+			interval:            time.Duration(maxInterval) * time.Millisecond,
+			pool:                pool,
+			maxConn:             maxConn,
+			maxCommandsPerBatch: maxCommandsPerBatch,
+			commandsChan:        make(chan []*Command, int(maxCommandsPerBatch)/maxConn),
+			flushChan:           make(chan []*Command, maxConn),
 		}
 
 		rb.createFlushers()
@@ -84,15 +84,15 @@ func NewRedisPipeline(pool *redigo.Pool, maxConn int, maxInterval int, maxBatch 
 
 			for {
 				select {
-				case newRedisCommand := <-rb.redisParam:
+				case newRedisCommand := <-rb.commandsChan:
 					redisCommands = append(redisCommands, newRedisCommand...)
 					commandCounter += uint64(len(newRedisCommand))
-					if commandCounter >= rb.maxBatch {
+					if commandCounter >= rb.maxCommandsPerBatch {
 						go rb.forceToFlush(forcedToFlush)
 					}
 
 				case <-forcedToFlush:
-					if len(redisCommands) >= int(rb.maxBatch) {
+					if len(redisCommands) >= int(rb.maxCommandsPerBatch) {
 						//passing slice not array
 						go rb.sendToFlusher(redisCommands[0:])
 						redisCommands = make([]*Command, 0)
@@ -167,8 +167,8 @@ func (rb *RedisPipelineImpl) forceToFlush(forcedToFlush chan bool) {
 	forcedToFlush <- true
 }
 
-func (rb *RedisPipelineImpl) sendToPipelineHub(redisParams []*Command) {
-	rb.redisParam <- redisParams
+func (rb *RedisPipelineImpl) sendToPipelineHub(commands []*Command) {
+	rb.commandsChan <- commands
 }
 
 func (rb *RedisPipelineImpl) sendToFlusher(redisCommands []*Command) {
