@@ -73,9 +73,7 @@ func NewRedisPipeline(interval int, pool *redigo.Pool, maxConn int, maxBatch uin
 			flushChan:  make(chan []*Command, maxConn),
 		}
 
-		for i := 0; i < rb.maxConn; i++ {
-			go rb.newFlusher(rb.flushChan)
-		}
+		rb.createFlushers()
 
 		go func() {
 			var (
@@ -114,6 +112,11 @@ func NewRedisPipeline(interval int, pool *redigo.Pool, maxConn int, maxBatch uin
 		}()
 	})
 	return rb
+}
+func (rb *RedisPipelineImpl) createFlushers() {
+	for i := 0; i < rb.maxConn; i++ {
+		go rb.newFlusher(rb.flushChan)
+	}
 }
 
 func (rb *RedisPipelineImpl) NewSession() RedisPipelineSession {
