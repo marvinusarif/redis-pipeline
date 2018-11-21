@@ -40,10 +40,9 @@ type RedisPipelineSessionImpl struct {
 	pipelineHub *RedisPipelineImpl
 	ctx         context.Context
 	session     *Session
-	done        chan *SessionResponse
 }
 type Status struct {
-	mu            *sync.RWMutex
+	mu            *sync.Mutex
 	shouldProcess bool
 	cancellable   bool
 }
@@ -77,12 +76,13 @@ func NewRedisPipeline(pool *redigo.Pool, maxConn int, maxInterval int, maxComman
 		if maxCommandsPerBatch < 1 {
 			maxCommandsPerBatch = DEFAULT_MAX_COMMAND_PER_BATCH
 		}
+
 		rb = &RedisPipelineImpl{
 			interval:            time.Duration(maxInterval) * time.Millisecond,
 			pool:                pool,
 			maxConn:             maxConn,
 			maxCommandsPerBatch: maxCommandsPerBatch,
-			sessionChan:         make(chan *Session, (10 * int(maxCommandsPerBatch) / maxConn / maxInterval)),
+			sessionChan:         make(chan *Session),
 			flushChan:           make(chan []*Session, maxConn),
 		}
 
@@ -108,6 +108,7 @@ func NewRedisPipeline(pool *redigo.Pool, maxConn int, maxInterval int, maxComman
 				case <-forcedToFlush:
 					if commandCounter >= rb.maxCommandsPerBatch {
 						//passing slice not array
+						// fmt.Println("max command forced", commandCounter)
 						go rb.sendToFlusher(sessions)
 						sessions = make([]*Session, 0)
 						commandCounter = 0
@@ -116,6 +117,7 @@ func NewRedisPipeline(pool *redigo.Pool, maxConn int, maxInterval int, maxComman
 				case <-ticker.C:
 					if len(sessions) > 0 {
 						//passing slice not array
+						// fmt.Println("max command timer", commandCounter)
 						go rb.sendToFlusher(sessions)
 						sessions = make([]*Session, 0)
 						commandCounter = 0
@@ -131,13 +133,12 @@ func (rb *RedisPipelineImpl) NewSession(ctx context.Context) RedisPipelineSessio
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	return &RedisPipelineSessionImpl{
+	session := &RedisPipelineSessionImpl{
 		pipelineHub: rb,
 		ctx:         ctx,
-		done:        make(chan *SessionResponse, 1),
 		session: &Session{
 			status: &Status{
-				mu:            &sync.RWMutex{},
+				mu:            &sync.Mutex{},
 				shouldProcess: true,
 				cancellable:   true,
 			},
@@ -145,6 +146,7 @@ func (rb *RedisPipelineImpl) NewSession(ctx context.Context) RedisPipelineSessio
 			commands:     make([]*Command, 0),
 		},
 	}
+	return session
 }
 
 func (rb *RedisPipelineImpl) createFlushers() {
@@ -168,8 +170,7 @@ func (rb *RedisPipelineImpl) flush(sessions []*Session) {
 	for _, session := range sessions {
 		if session.status.startProcessIfAllowed() {
 			var sessErr error
-			cmdresponses := make([]*CommandResponse, 0)
-
+			var cmdresponses []*CommandResponse
 			for _, cmd := range session.commands {
 				err := conn.Send(cmd.commandName, cmd.args...)
 				if err != nil {
@@ -186,26 +187,23 @@ func (rb *RedisPipelineImpl) flush(sessions []*Session) {
 	}
 
 	if len(sentSessions) > 0 {
-		err := conn.Flush()
-		if err != nil {
+		if err := conn.Flush(); err != nil {
 			for _, session := range sentSessions {
 				go session.reply(nil, err)
 			}
-			return
-		}
-
-		for _, session := range sentSessions {
-			var sessErr error
-			cmdresponses := make([]*CommandResponse, 0)
-
-			for _ = range session.commands {
-				resp, err := conn.Receive()
-				if err != nil {
-					sessErr = err
+		} else {
+			for _, session := range sentSessions {
+				var sessErr error
+				var cmdresponses []*CommandResponse
+				for _ = range session.commands {
+					resp, err := conn.Receive()
+					if err != nil {
+						sessErr = err
+					}
+					cmdresponses = append(cmdresponses, &CommandResponse{resp, err})
 				}
-				cmdresponses = append(cmdresponses, &CommandResponse{resp, err})
+				go session.reply(cmdresponses, sessErr)
 			}
-			go session.reply(cmdresponses, sessErr)
 		}
 	}
 }
@@ -237,63 +235,64 @@ func (ps *RedisPipelineSessionImpl) PushCommand(command string, args ...interfac
 
 func (ps *RedisPipelineSessionImpl) Execute() ([]*CommandResponse, error) {
 	go ps.pipelineHub.sendToPipelineHub(ps.session)
-	go ps.waitResponse()
-	select {
-	case resp := <-ps.done:
-		return resp.CommandsResponses, resp.Err
-	}
+	return ps.waitResponse()
 }
 
-func (ps *RedisPipelineSessionImpl) waitResponse() {
+func (ps *RedisPipelineSessionImpl) waitResponse() ([]*CommandResponse, error) {
 	var (
-		cmdResponses []*CommandResponse
+		responses []*CommandResponse
+		err       error
 	)
-	for {
-		select {
-		case sessionResponse := <-ps.session.responseChan:
-			ps.done <- sessionResponse
-			break
 
-		case <-ps.ctx.Done():
-			if ps.session.status.stopProcessIfAllowed() {
-				ps.done <- &SessionResponse{cmdResponses, ps.ctx.Err()}
-				break
-			}
+	select {
+	case sessionResponse := <-ps.session.responseChan:
+		responses = sessionResponse.CommandsResponses
+		err = sessionResponse.Err
+
+	case <-ps.ctx.Done():
+		//if the session is still cancellable then cancel it, if not then wait until get response
+		if ps.session.status.cancelProcessIfAllowed() {
+			err = ps.ctx.Err()
 		}
 	}
+	return responses, err
+}
+func (s *Status) getShouldProcessStat() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.shouldProcess
+}
+
+func (s *Status) setNotCancellable() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.cancellable = false
+}
+
+func (s *Status) getCancellableStat() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.cancellable
+}
+
+func (s *Status) setNotShouldProcess() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.shouldProcess = false
 }
 
 func (s *Status) startProcessIfAllowed() bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.getShouldProcess() {
-		s.setCancellable(false)
+	if s.getShouldProcessStat() {
+		s.setNotCancellable()
 		return true
 	}
 	return false
 }
 
-func (s *Status) stopProcessIfAllowed() bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.getCancellable() {
-		s.setShouldProcess(false)
+func (s *Status) cancelProcessIfAllowed() bool {
+	if s.getCancellableStat() {
+		s.setNotShouldProcess()
 		return true
 	}
 	return false
-}
-
-func (s *Status) getShouldProcess() bool {
-	return s.shouldProcess
-}
-func (s *Status) setShouldProcess(stat bool) {
-	s.shouldProcess = stat
-}
-
-func (s *Status) setCancellable(stat bool) {
-	s.cancellable = stat
-}
-
-func (s *Status) getCancellable() bool {
-	return s.cancellable
 }
