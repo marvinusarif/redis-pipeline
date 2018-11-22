@@ -10,7 +10,6 @@ import (
 	"syscall"
 	"time"
 
-	redigo "github.com/gomodule/redigo/redis"
 	"github.com/google/gops/agent"
 	redispipeline "github.com/redis-pipeline"
 )
@@ -19,16 +18,8 @@ func main() {
 	/*
 		Warning :
 			Redis Pipeline is useful for retrieving data or updating data in batch. This library is intended to execute as much commands as possible in single round trip time.
-			There is no guarantee regarding the data sent to the pipeline get executed succesfully.
-
-			Although you can execute MULTI/EXEC command using this Library it's not suggested to use this library if you need high level of data integrity.
-			If you want please use Redis Worker Pool Library!
-				Or
-			You might use this library so it would wait until the response get returned from redis.
-
-			*Note : Implementing context WithTimeout, there might be a race condition between returned response and timeouts.
-			your context reaches its timeout and giving you false response but the commands get already succesfully sent and executed!
-			**longer timeout might solve your problem
+			if the pipeline session is timedout then all commands in the session won't get executed. If the timeout is not reached when all commands sent to redis server,
+			it would wait until the response get returned from redis.
 	*/
 
 	if err := agent.Listen(agent.Options{}); err != nil {
@@ -36,23 +27,11 @@ func main() {
 	}
 	log.SetFlags(log.Llongfile | log.Ldate | log.Ltime)
 
+	redisHost := ":6379"
 	maxConn := 100
-	maxCommandsBatch := uint64(500000)
-	pool := &redigo.Pool{
-		MaxActive:   maxConn,
-		MaxIdle:     maxConn,
-		IdleTimeout: 5 * time.Second,
-		Wait:        true,
-		Dial: func() (redigo.Conn, error) {
-			c, err := redigo.Dial("tcp", ":32392", redigo.DialConnectTimeout(5*time.Second))
-			if err != nil {
-				fmt.Println(err)
-				return nil, err
-			}
-			return c, err
-		},
-	}
-	rb := redispipeline.NewRedisPipeline(pool, maxConn, maxCommandsBatch)
+	maxCommandsBatch := uint64(100)
+
+	rb := redispipeline.NewRedisPipeline(redisHost, maxConn, maxCommandsBatch)
 
 	fmt.Println("starting multi/exec session")
 	now := time.Now()
