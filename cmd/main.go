@@ -36,9 +36,8 @@ func main() {
 	}
 	log.SetFlags(log.Llongfile | log.Ldate | log.Ltime)
 
-	maxInterval := 200
-	maxConn := 50
-	maxCommandsBatch := uint64(100000)
+	maxConn := 100
+	maxCommandsBatch := uint64(500000)
 	pool := &redigo.Pool{
 		MaxActive:   maxConn,
 		MaxIdle:     maxConn,
@@ -53,7 +52,7 @@ func main() {
 			return c, err
 		},
 	}
-	rb := redispipeline.NewRedisPipeline(pool, maxConn, maxInterval, maxCommandsBatch)
+	rb := redispipeline.NewRedisPipeline(pool, maxConn, maxCommandsBatch)
 
 	fmt.Println("starting multi/exec session")
 	now := time.Now()
@@ -183,7 +182,7 @@ func getKeyFromRedis(rb redispipeline.RedisPipeline, i int) {
 }
 
 func setKeyToRedis(rb redispipeline.RedisPipeline, i int) {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(i*500)*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(i*10)*time.Millisecond)
 	defer cancel()
 	_, err := rb.NewSession(ctx).
 		PushCommand("SET", fmt.Sprintf("testA%d", i), i).

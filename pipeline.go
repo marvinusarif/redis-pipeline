@@ -63,13 +63,10 @@ type RedisPipelineImpl struct {
 
 var once sync.Once
 
-func NewRedisPipeline(pool *redigo.Pool, maxConn int, maxInterval int, maxCommandsPerBatch uint64) RedisPipeline {
+func NewRedisPipeline(pool *redigo.Pool, maxConn int, maxCommandsPerBatch uint64) RedisPipeline {
 	var rb *RedisPipelineImpl
 
 	once.Do(func() {
-		if maxInterval < 1 {
-			maxInterval = DEFAULT_MAX_INTERVAL
-		}
 		if maxConn < 1 {
 			maxConn = DEFAULT_MAX_CONN
 		}
@@ -78,7 +75,7 @@ func NewRedisPipeline(pool *redigo.Pool, maxConn int, maxInterval int, maxComman
 		}
 
 		rb = &RedisPipelineImpl{
-			interval:            time.Duration(maxInterval) * time.Millisecond,
+			interval:            time.Duration(1000/maxConn) * time.Millisecond,
 			pool:                pool,
 			maxConn:             maxConn,
 			maxCommandsPerBatch: maxCommandsPerBatch,
@@ -108,7 +105,6 @@ func NewRedisPipeline(pool *redigo.Pool, maxConn int, maxInterval int, maxComman
 				case <-forcedToFlush:
 					if commandCounter >= rb.maxCommandsPerBatch {
 						//passing slice not array
-						// fmt.Println("max command forced", commandCounter)
 						go rb.sendToFlusher(sessions)
 						sessions = make([]*Session, 0)
 						commandCounter = 0
@@ -117,7 +113,6 @@ func NewRedisPipeline(pool *redigo.Pool, maxConn int, maxInterval int, maxComman
 				case <-ticker.C:
 					if len(sessions) > 0 {
 						//passing slice not array
-						// fmt.Println("max command timer", commandCounter)
 						go rb.sendToFlusher(sessions)
 						sessions = make([]*Session, 0)
 						commandCounter = 0
@@ -168,7 +163,7 @@ func (rb *RedisPipelineImpl) flush(sessions []*Session) {
 	defer conn.Close()
 
 	for _, session := range sessions {
-		if session.status.startProcessIfAllowed() {
+		if session.status.startProcessIfAllowed() == true {
 			var sessErr error
 			var cmdresponses []*CommandResponse
 			for _, cmd := range session.commands {
@@ -243,55 +238,34 @@ func (ps *RedisPipelineSessionImpl) waitResponse() ([]*CommandResponse, error) {
 		responses []*CommandResponse
 		err       error
 	)
-
 	select {
+	case <-ps.ctx.Done():
+		if ps.session.status.stopProcessIfAllowed() == true {
+			err = ps.ctx.Err()
+		}
+
 	case sessionResponse := <-ps.session.responseChan:
 		responses = sessionResponse.CommandsResponses
 		err = sessionResponse.Err
-
-	case <-ps.ctx.Done():
-		//if the session is still cancellable then cancel it, if not then wait until get response
-		if ps.session.status.cancelProcessIfAllowed() {
-			err = ps.ctx.Err()
-		}
 	}
 	return responses, err
 }
-func (s *Status) getShouldProcessStat() bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.shouldProcess
-}
-
-func (s *Status) setNotCancellable() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.cancellable = false
-}
-
-func (s *Status) getCancellableStat() bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.cancellable
-}
-
-func (s *Status) setNotShouldProcess() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.shouldProcess = false
-}
 
 func (s *Status) startProcessIfAllowed() bool {
-	if s.getShouldProcessStat() {
-		s.setNotCancellable()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.shouldProcess {
+		s.cancellable = false
 		return true
 	}
 	return false
 }
 
-func (s *Status) cancelProcessIfAllowed() bool {
-	if s.getCancellableStat() {
-		s.setNotShouldProcess()
+func (s *Status) stopProcessIfAllowed() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.cancellable {
+		s.shouldProcess = false
 		return true
 	}
 	return false
