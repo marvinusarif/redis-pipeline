@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -21,55 +22,91 @@ func main() {
 			if the pipeline session is timedout then all commands in the session won't get executed. If the timeout is not reached when all commands sent to redis server,
 			it would wait until the response get returned from redis.
 	*/
-
+	//gops!
 	if err := agent.Listen(agent.Options{}); err != nil {
 		log.Fatal(err)
 	}
+
 	log.SetFlags(log.Llongfile | log.Ldate | log.Ltime)
 
-	redisHost := ":6379"
-	maxConn := 100
-	maxCommandsBatch := uint64(100)
+	redisHost := "localhost:6380"
+	maxConn := 200
+	maxCommandsBatch := uint64(2000)
 
 	rb := redispipeline.NewRedisPipeline(redisHost, maxConn, maxCommandsBatch)
-
+	/*
+		simulates concurrent rps
+	*/
+	var requestTimeout uint64
+	requests := 22500
+	redisJobPerRequest := 4
 	fmt.Println("starting multi/exec session")
 	now := time.Now()
 	wg := &sync.WaitGroup{}
-	for i := 1; i <= 300000; i++ {
-		go func(rb redispipeline.RedisPipeline, i int) {
-			wg.Add(1)
-			defer wg.Done()
-			multiExecRedis(rb, i)
-		}(rb, i)
-	}
-	wg.Wait()
+	// wg.Add(requests * redisJobPerRequest)
+	// for i := 1; i <= requests; i++ {
+	// 	go func() {
+	// 		defer wg.Done()
+	// 		for i := 0; i <= redisJobPerRequest; i++ {
+	// 			multiExecRedis(rb, i, ctx)
+	// 		}
+	// 	}()
+	// }
+	// wg.Wait()
 	fmt.Println(time.Since(now))
 	fmt.Println("ending multi/exec session")
 
 	fmt.Println("starting set session")
 	now = time.Now()
-	for i := 1; i <= 300000; i++ {
-		go func(rb redispipeline.RedisPipeline, i int) {
-			wg.Add(1)
+	wg = &sync.WaitGroup{}
+	requestTimeout = uint64(0)
+	for x := 1; x <= requests; x++ {
+		wg.Add(1)
+		go func(x int) {
 			defer wg.Done()
-			setKeyToRedis(rb, i)
-		}(rb, i)
+			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(1000)*time.Millisecond)
+			defer cancel()
+			var requestTimeoutError error
+			for y := 1; y <= redisJobPerRequest; y++ {
+				err := setKeyToRedis(rb, fmt.Sprintf("%d%d", x, y), ctx)
+				if err != nil {
+					requestTimeoutError = err
+				}
+			}
+			if requestTimeoutError != nil {
+				atomic.AddUint64(&requestTimeout, 1)
+			}
+		}(x)
 	}
 	wg.Wait()
+	fmt.Println("timeout requests :", requestTimeout)
 	fmt.Println(time.Since(now))
 	fmt.Println("ending set session")
 
 	fmt.Println("starting get session")
 	now = time.Now()
-	for i := 1; i <= 300000; i++ {
-		go func(rb redispipeline.RedisPipeline, i int) {
-			wg.Add(1)
+	wg = &sync.WaitGroup{}
+	requestTimeout = uint64(0)
+	for x := 1; x <= requests; x++ {
+		wg.Add(1)
+		go func(x int) {
 			defer wg.Done()
-			getKeyFromRedis(rb, i)
-		}(rb, i)
+			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(1000)*time.Millisecond)
+			defer cancel()
+			var requestTimeoutError error
+			for y := 1; y <= redisJobPerRequest; y++ {
+				err := getKeyFromRedis(rb, fmt.Sprintf("%d%d", x, y), ctx)
+				if err != nil {
+					requestTimeoutError = err
+				}
+			}
+			if requestTimeoutError != nil {
+				atomic.AddUint64(&requestTimeout, 1)
+			}
+		}(x)
 	}
 	wg.Wait()
+	fmt.Println("timeout requests :", requestTimeout)
 	fmt.Println(time.Since(now))
 	fmt.Println("ending get session")
 
@@ -82,20 +119,21 @@ func main() {
 	}
 }
 
-func multiExecRedis(rb redispipeline.RedisPipeline, i int) {
-	_, err := rb.NewSession(context.Background()).
+func multiExecRedis(rb redispipeline.RedisPipeline, i string, ctx context.Context) error {
+	_, err := rb.NewSession(ctx).
 		PushCommand("MULTI").             //response : {OK, <nil>}
-		PushCommand("SET", "testA%d", i). //response : {QUEUED, <nil>}
-		PushCommand("SET", "testB%d", i). // response : {QUEUED, <nil>}
-		PushCommand("SET", "testC%d", i). // response : {QUEUED, <nil>}
-		PushCommand("SET", "testD%d", i). // response : {QUEUED, <nil>}
-		PushCommand("SET", "testE%d", i). // response : {QUEUED, <nil>}
+		PushCommand("SET", "testA%s", i). //response : {QUEUED, <nil>}
+		PushCommand("SET", "testB%s", i). // response : {QUEUED, <nil>}
+		PushCommand("SET", "testC%s", i). // response : {QUEUED, <nil>}
+		PushCommand("SET", "testD%s", i). // response : {QUEUED, <nil>}
+		PushCommand("SET", "testE%s", i). // response : {QUEUED, <nil>}
 		PushCommand("INCR", "test").
 		PushCommand("EXEC"). //response : {[1,1,1,1,1], <nil>}
 		Execute()
 	if err != nil {
-		fmt.Println(err)
+		return err
 	}
+	return nil
 	// `for _, resp := range resps {
 	// 	if resp.Err != nil {
 	// 		fmt.Println(resp.Err)
@@ -125,20 +163,18 @@ func multiExecRedis(rb redispipeline.RedisPipeline, i int) {
 	// }`
 }
 
-func getKeyFromRedis(rb redispipeline.RedisPipeline, i int) {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(i*250)*time.Millisecond)
-	defer cancel()
+func getKeyFromRedis(rb redispipeline.RedisPipeline, i string, ctx context.Context) error {
 	_, err := rb.NewSession(ctx).
-		PushCommand("GET", fmt.Sprintf("testA%d", i)).
-		PushCommand("GET", fmt.Sprintf("testB%d", i)).
-		PushCommand("GET", fmt.Sprintf("testC%d", i)).
-		PushCommand("GET", fmt.Sprintf("testD%d", i)).
-		PushCommand("GET", fmt.Sprintf("testE%d", i)).
-		PushCommand("GET", "test").
+		PushCommand("GET", fmt.Sprintf("testA%s", i)).
+		PushCommand("GET", fmt.Sprintf("testB%s", i)).
+		PushCommand("GET", fmt.Sprintf("testC%s", i)).
+		PushCommand("GET", fmt.Sprintf("testD%s", i)).
+		PushCommand("GET", fmt.Sprintf("testE%s", i)).
 		Execute()
 	if err != nil {
-		fmt.Println("get key", i, ":", err)
+		return err
 	}
+	return nil
 	/*
 	 Need to cast the response and error accordingly in sequential order
 	*/
@@ -160,20 +196,18 @@ func getKeyFromRedis(rb redispipeline.RedisPipeline, i int) {
 	// }
 }
 
-func setKeyToRedis(rb redispipeline.RedisPipeline, i int) {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(i*10)*time.Millisecond)
-	defer cancel()
+func setKeyToRedis(rb redispipeline.RedisPipeline, i string, ctx context.Context) error {
 	_, err := rb.NewSession(ctx).
-		PushCommand("SET", fmt.Sprintf("testA%d", i), i).
-		PushCommand("SET", fmt.Sprintf("testB%d", i), i).
-		PushCommand("SET", fmt.Sprintf("testC%d", i), i).
-		PushCommand("SET", fmt.Sprintf("testD%d", i), i).
-		PushCommand("SET", fmt.Sprintf("testE%d", i), i).
-		PushCommand("INCR", "test").
+		PushCommand("SET", fmt.Sprintf("testA%s", i), i).
+		PushCommand("SET", fmt.Sprintf("testB%s", i), i).
+		PushCommand("SET", fmt.Sprintf("testC%s", i), i).
+		PushCommand("SET", fmt.Sprintf("testD%s", i), i).
+		PushCommand("SET", fmt.Sprintf("testE%s", i), i).
 		Execute()
 	if err != nil {
-		fmt.Println("set key", i, ":", err)
+		return err
 	}
+	return nil
 	/*
 	 Need to cast the response and error accordingly in sequential order
 	*/
