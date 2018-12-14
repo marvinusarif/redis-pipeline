@@ -1,6 +1,8 @@
 package redispipeline
 
 import (
+	"context"
+	"fmt"
 	"sync"
 	"time"
 
@@ -8,68 +10,91 @@ import (
 )
 
 const (
-	DEFAULT_MAX_INTERVAL          int    = 1000
-	DEFAULT_MAX_CONN              int    = 10
-	DEFAULT_MAX_COMMAND_PER_BATCH uint64 = 100000
+	DEFAULT_MAX_COMMAND_PER_BATCH uint64 = 100
 )
 
 type RedisPipeline interface {
-	NewSession() RedisPipelineSession
+	NewSession(ctx context.Context) RedisPipelineSession
 }
 
 type RedisPipelineSession interface {
 	PushCommand(command string, args ...interface{}) RedisPipelineSession
-	Execute() []*Response
+	Execute() ([]*CommandResponse, error)
 }
 
 type Command struct {
-	responseChan chan *Response
-	commandName  string
-	args         []interface{}
+	commandName string
+	args        []interface{}
 }
 
-type Response struct {
+type CommandResponse struct {
 	Value interface{}
 	Err   error
 }
-
+type SessionResponse struct {
+	CommandsResponses []*CommandResponse
+	Err               error
+}
 type RedisPipelineSessionImpl struct {
-	pipelineHub  *RedisPipelineImpl
-	responseChan chan *Response
+	pipelineHub *RedisPipelineImpl
+	ctx         context.Context
+	session     *Session
+}
+type Status struct {
+	mu            *sync.Mutex
+	shouldProcess bool
+	cancellable   bool
+}
+type Session struct {
+	status       *Status
+	responseChan chan *SessionResponse
 	commands     []*Command
 }
 
 type RedisPipelineImpl struct {
 	interval            time.Duration
 	pool                *redigo.Pool
-	maxConn             int
 	maxCommandsPerBatch uint64
-	commandsChan        chan []*Command
-	flushChan           chan []*Command
+	sessionChan         chan *Session
+	flushChan           chan []*Session
 }
 
 var once sync.Once
 
-func NewRedisPipeline(pool *redigo.Pool, maxConn int, maxInterval int, maxCommandsPerBatch uint64) RedisPipeline {
+func NewRedisPipeline(host string, maxConn int, maxCommandsPerBatch uint64) RedisPipeline {
 	var rb *RedisPipelineImpl
 
 	once.Do(func() {
-		if maxInterval < 1 {
-			maxInterval = DEFAULT_MAX_INTERVAL
-		}
-		if maxConn < 1 {
-			maxConn = DEFAULT_MAX_CONN
-		}
 		if maxCommandsPerBatch < 1 {
 			maxCommandsPerBatch = DEFAULT_MAX_COMMAND_PER_BATCH
 		}
+
+		pool := &redigo.Pool{
+			MaxActive:   maxConn,
+			MaxIdle:     maxConn,
+			IdleTimeout: 8 * time.Second,
+			TestOnBorrow: func(c redigo.Conn, t time.Time) error {
+				_, err := c.Do("PING")
+				return err
+			},
+			Wait: true,
+			Dial: func() (redigo.Conn, error) {
+				c, err := redigo.Dial("tcp", host, redigo.DialConnectTimeout(5*time.Second))
+				if err != nil {
+					fmt.Println(err)
+					return nil, err
+				}
+				return c, err
+			},
+		}
+
 		rb = &RedisPipelineImpl{
-			interval:            time.Duration(maxInterval) * time.Millisecond,
+			//must be larger than client timeout
+			interval:            time.Duration(10) * time.Millisecond,
 			pool:                pool,
-			maxConn:             maxConn,
 			maxCommandsPerBatch: maxCommandsPerBatch,
-			commandsChan:        make(chan []*Command, int(maxCommandsPerBatch)*10/(maxConn*maxInterval)),
-			flushChan:           make(chan []*Command, maxConn),
+			sessionChan:         make(chan *Session, pool.MaxActive*10),
+			flushChan:           make(chan []*Session, pool.MaxActive),
 		}
 
 		rb.createFlushers()
@@ -77,33 +102,31 @@ func NewRedisPipeline(pool *redigo.Pool, maxConn int, maxInterval int, maxComman
 		go func() {
 			var (
 				commandCounter uint64
-				redisCommands  []*Command
 			)
+			sessions := make([]*Session, 0)
 			ticker := time.NewTicker(rb.interval)
 			forcedToFlush := make(chan bool)
 
 			for {
 				select {
-				case newRedisCommand := <-rb.commandsChan:
-					redisCommands = append(redisCommands, newRedisCommand...)
-					commandCounter += uint64(len(newRedisCommand))
+				case newSession := <-rb.sessionChan:
+					sessions = append(sessions, newSession)
+					commandCounter += uint64(len(newSession.commands))
 					if commandCounter >= rb.maxCommandsPerBatch {
 						go rb.forceToFlush(forcedToFlush)
 					}
 
 				case <-forcedToFlush:
-					if len(redisCommands) >= int(rb.maxCommandsPerBatch) {
-						//passing slice not array
-						go rb.sendToFlusher(redisCommands[0:])
-						redisCommands = make([]*Command, 0)
+					if commandCounter >= rb.maxCommandsPerBatch {
+						go rb.sendToFlusher(sessions)
+						sessions = make([]*Session, 0)
 						commandCounter = 0
 					}
 
 				case <-ticker.C:
-					if len(redisCommands) > 0 {
-						//passing slice not array
-						go rb.sendToFlusher(redisCommands[0:])
-						redisCommands = make([]*Command, 0)
+					if len(sessions) > 0 {
+						go rb.sendToFlusher(sessions)
+						sessions = make([]*Session, 0)
 						commandCounter = 0
 					}
 				}
@@ -113,94 +136,159 @@ func NewRedisPipeline(pool *redigo.Pool, maxConn int, maxInterval int, maxComman
 	return rb
 }
 
-func (rb *RedisPipelineImpl) NewSession() RedisPipelineSession {
-	return &RedisPipelineSessionImpl{
-		pipelineHub:  rb,
-		responseChan: nil,
-		commands:     make([]*Command, 0),
+func (rb *RedisPipelineImpl) NewSession(ctx context.Context) RedisPipelineSession {
+	if ctx == nil {
+		ctx = context.Background()
 	}
+	session := &RedisPipelineSessionImpl{
+		pipelineHub: rb,
+		ctx:         ctx,
+		session: &Session{
+			status: &Status{
+				mu:            &sync.Mutex{},
+				shouldProcess: true,
+				cancellable:   true,
+			},
+			responseChan: make(chan *SessionResponse, 1),
+			commands:     make([]*Command, 0),
+		},
+	}
+	return session
 }
 
 func (rb *RedisPipelineImpl) createFlushers() {
-	for i := 0; i < rb.maxConn; i++ {
+	for i := 0; i < rb.pool.MaxActive; i++ {
 		go rb.newFlusher(rb.flushChan)
 	}
 }
 
-func (rb *RedisPipelineImpl) newFlusher(flushChan chan []*Command) {
-	for redisCommands := range flushChan {
-		rb.flush(redisCommands)
+func (rb *RedisPipelineImpl) newFlusher(flushChan chan []*Session) {
+	for sessions := range flushChan {
+		rb.flush(sessions)
 	}
 }
 
-func (rb *RedisPipelineImpl) flush(redisCommands []*Command) {
-	var sentCommands []*Command
+func (rb *RedisPipelineImpl) flush(sessions []*Session) {
+	// fmt.Println("flush")
+	sentSessions := make([]*Session, 0)
 	conn := rb.pool.Get()
 	defer conn.Close()
 
-	for _, cmd := range redisCommands {
-		if err := conn.Send(cmd.commandName, cmd.args...); err != nil {
-			rb.reply(cmd, nil, err)
-		} else {
-			sentCommands = append(sentCommands, cmd)
+	// now := time.Now()
+	for _, session := range sessions {
+		if session.status.startProcessIfAllowed() == true {
+			var sessErr error
+			var cmdresponses []*CommandResponse
+			for _, cmd := range session.commands {
+				err := conn.Send(cmd.commandName, cmd.args...)
+				if err != nil {
+					sessErr = err
+				}
+				cmdresponses = append(cmdresponses, &CommandResponse{nil, err})
+			}
+			if sessErr != nil {
+				go session.reply(cmdresponses, sessErr)
+			} else {
+				sentSessions = append(sentSessions, session)
+			}
 		}
 	}
 
-	err := conn.Flush()
-	if err != nil {
-		for _, cmd := range sentCommands {
-			rb.reply(cmd, nil, err)
-		}
-	}
-
-	for _, cmd := range sentCommands {
-		resp, err := conn.Receive()
+	if len(sentSessions) > 0 {
+		err := conn.Flush()
 		if err != nil {
-			rb.reply(cmd, nil, err)
+			for _, session := range sentSessions {
+				go session.reply(nil, err)
+			}
 		} else {
-			rb.reply(cmd, resp, nil)
+			for _, session := range sentSessions {
+				var sessErr error
+				var cmdresponses []*CommandResponse
+				// go session.reply(nil, nil)
+				for _ = range session.commands {
+					// now = time.Now()
+					resp, err := conn.Receive()
+					// log.Println("time receive :", time.Since(now))
+					if err != nil {
+						sessErr = err
+					}
+					// now = time.Now()
+					cmdresponses = append(cmdresponses, &CommandResponse{resp, err})
+					// log.Println("time append :", time.Since(now))
+
+				}
+
+				go session.reply(cmdresponses, sessErr)
+			}
 		}
 	}
+
 }
 
 func (rb *RedisPipelineImpl) forceToFlush(forcedToFlush chan bool) {
 	forcedToFlush <- true
 }
 
-func (rb *RedisPipelineImpl) sendToPipelineHub(commands []*Command) {
-	rb.commandsChan <- commands
+func (rb *RedisPipelineImpl) sendToPipelineHub(session *Session) {
+	rb.sessionChan <- session
 }
 
-func (rb *RedisPipelineImpl) sendToFlusher(redisCommands []*Command) {
-	rb.flushChan <- redisCommands
+func (rb *RedisPipelineImpl) sendToFlusher(sessions []*Session) {
+	rb.flushChan <- sessions
 }
 
-func (rb *RedisPipelineImpl) reply(cmd *Command, resp interface{}, err error) {
-	cmd.responseChan <- &Response{resp, err}
+func (s *Session) reply(cmdresp []*CommandResponse, err error) {
+	s.responseChan <- &SessionResponse{CommandsResponses: cmdresp, Err: err}
 }
 
 func (ps *RedisPipelineSessionImpl) PushCommand(command string, args ...interface{}) RedisPipelineSession {
 	cmd := &Command{
 		commandName: command,
 		args:        args,
-		//copy response channel from pipeline session to command response channel - it will share the same address
-		responseChan: ps.responseChan,
 	}
-	ps.commands = append(ps.commands, cmd)
+	ps.session.commands = append(ps.session.commands, cmd)
 	return ps
 }
 
-func (ps *RedisPipelineSessionImpl) Execute() []*Response {
-	ps.responseChan = make(chan *Response, len(ps.commands))
-	go ps.pipelineHub.sendToPipelineHub(ps.commands)
+func (ps *RedisPipelineSessionImpl) Execute() ([]*CommandResponse, error) {
+	go ps.pipelineHub.sendToPipelineHub(ps.session)
 	return ps.waitResponse()
 }
 
-func (ps *RedisPipelineSessionImpl) waitResponse() []*Response {
-	var responses []*Response
-	for i := 0; i < len(ps.commands); i++ {
-		responses = append(responses, <-ps.responseChan)
+func (ps *RedisPipelineSessionImpl) waitResponse() ([]*CommandResponse, error) {
+	var (
+		responses []*CommandResponse
+		err       error
+	)
+	select {
+	case <-ps.ctx.Done():
+		if ps.session.status.stopProcessIfAllowed() == true {
+			err = ps.ctx.Err()
+		}
+
+	case sessionResponse := <-ps.session.responseChan:
+		responses = sessionResponse.CommandsResponses
+		err = sessionResponse.Err
 	}
-	close(ps.responseChan)
-	return responses
+	return responses, err
+}
+
+func (s *Status) startProcessIfAllowed() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.shouldProcess {
+		s.cancellable = false
+		return true
+	}
+	return false
+}
+
+func (s *Status) stopProcessIfAllowed() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.cancellable {
+		s.shouldProcess = false
+		return true
+	}
+	return false
 }
