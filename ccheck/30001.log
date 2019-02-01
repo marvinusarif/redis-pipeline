@@ -1,0 +1,5 @@
+72091:C 01 Feb 2019 10:38:09.358 # oO0OoO0OoO0Oo Redis is starting oO0OoO0OoO0Oo
+72091:C 01 Feb 2019 10:38:09.359 # Redis version=5.0.1, bits=64, commit=00000000, modified=0, pid=72091, just started
+72091:C 01 Feb 2019 10:38:09.359 # Configuration loaded
+72092:M 01 Feb 2019 10:38:09.361 * Increased maximum number of open files to 10032 (it was originally set to 256).
+72092:M 01 Feb 2019 10:38:09.362 # Creating Server TCP listening socket *:30001: bind: Address already in use

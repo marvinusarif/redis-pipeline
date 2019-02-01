@@ -2,6 +2,14 @@
 
 
 [[projects]]
+  branch = "master"
+  digest = "1:ba1b501bf70b610c6f580976a7f35cf23b0a8aad1538eb3955a8f26172c5c050"
+  name = "github.com/chasex/redis-go-cluster"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "222d81891f1d3fa7cf8b5655020352c3e5b4ec0f"
+
+[[projects]]
   digest = "1:38ec74012390146c45af1f92d46e5382b50531247929ff3a685d2b2be65155ac"
   name = "github.com/gomodule/redigo"
   packages = [
@@ -12,9 +20,42 @@
   revision = "9c11da706d9b7902c6da69c592f75637793fe121"
   version = "v2.0.0"
 
+[[projects]]
+  digest = "1:aebccac5eae98c77bbdf314428fb06ec1c1b4bee91589c3624d7facba176b8a6"
+  name = "github.com/google/gops"
+  packages = [
+    "agent",
+    "internal",
+    "signal",
+  ]
+  pruneopts = "UT"
+  revision = "9fda3b87c7b32caeeb2974e7cc2e71e60a597fdf"
+  version = "v0.3.6"
+
+[[projects]]
+  branch = "master"
+  digest = "1:caf6db28595425c0e0f2301a00257d11712f65c1878e12cffc42f6b9a9cf3f23"
+  name = "github.com/kardianos/osext"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "ae77be60afb1dcacde03767a8c37337fad28ac14"
+
+[[projects]]
+  digest = "1:70a6a70968ec19cc58c52c90e1b82f6bedff72de794c3a9eb52ea2ac81972334"
+  name = "github.com/mna/redisc"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "703f85d40639b6eee57c6cccc2afc0fba2b1e884"
+  version = "v1.1.4"
+
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  input-imports = ["github.com/gomodule/redigo/redis"]
+  input-imports = [
+    "github.com/chasex/redis-go-cluster",
+    "github.com/gomodule/redigo/redis",
+    "github.com/google/gops/agent",
+    "github.com/mna/redisc",
+  ]
   solver-name = "gps-cdcl"
   solver-version = 1

@@ -16,50 +16,27 @@ import (
 )
 
 func main() {
-	/*
-		Warning :
-			Redis Pipeline is useful for retrieving data or updating data in batch. This library is intended to execute as much commands as possible in single round trip time.
-			if the pipeline session is timedout then all commands in the session won't get executed. If the timeout is not reached when all commands sent to redis server,
-			it would wait until the response get returned from redis.
-	*/
-	//gops!
 	if err := agent.Listen(agent.Options{}); err != nil {
 		log.Fatal(err)
 	}
-
 	log.SetFlags(log.Llongfile | log.Ldate | log.Ltime)
 
-	redisHost := "localhost:6380"
+	redisHost := "127.0.0.1:30001;127.0.0.1:30002;127.0.0.1:30003;127.0.0.1:30004;127.0.0.1:30005;127.0.0.1:30006"
+	// redisHost := "127.0.0.1:30001;127.0.0.1:30002;127.0.0.1:30003"
 	maxConn := 200
-	maxCommandsBatch := uint64(2000)
+	maxCommandsBatch := uint64(200)
 
-	rb := redispipeline.NewRedisPipeline(redisHost, maxConn, maxCommandsBatch)
-	/*
-		simulates concurrent rps
-	*/
-	var requestTimeout uint64
-	requests := 22500
+	rbc, err := redispipeline.NewRedisPipeline(redispipeline.CLUSTER_MODE, redisHost, maxConn, maxCommandsBatch)
+	if err != nil {
+		log.Println(err)
+	}
+
+	fmt.Println("starting get session")
+	requests := 10000
 	redisJobPerRequest := 4
-	fmt.Println("starting multi/exec session")
 	now := time.Now()
 	wg := &sync.WaitGroup{}
-	// wg.Add(requests * redisJobPerRequest)
-	// for i := 1; i <= requests; i++ {
-	// 	go func() {
-	// 		defer wg.Done()
-	// 		for i := 0; i <= redisJobPerRequest; i++ {
-	// 			multiExecRedis(rb, i, ctx)
-	// 		}
-	// 	}()
-	// }
-	// wg.Wait()
-	fmt.Println(time.Since(now))
-	fmt.Println("ending multi/exec session")
-
-	fmt.Println("starting set session")
-	now = time.Now()
-	wg = &sync.WaitGroup{}
-	requestTimeout = uint64(0)
+	requestTimeout := uint64(0)
 	for x := 1; x <= requests; x++ {
 		wg.Add(1)
 		go func(x int) {
@@ -68,8 +45,9 @@ func main() {
 			defer cancel()
 			var requestTimeoutError error
 			for y := 1; y <= redisJobPerRequest; y++ {
-				err := setKeyToRedis(rb, fmt.Sprintf("%d%d", x, y), ctx)
+				err := setKeyToRedis(rbc, fmt.Sprintf("%d%d", x, y), ctx)
 				if err != nil {
+					fmt.Println(err)
 					requestTimeoutError = err
 				}
 			}
@@ -81,12 +59,9 @@ func main() {
 	wg.Wait()
 	fmt.Println("timeout requests :", requestTimeout)
 	fmt.Println(time.Since(now))
-	fmt.Println("ending set session")
+	fmt.Println("ending get session")
 
 	fmt.Println("starting get session")
-	now = time.Now()
-	wg = &sync.WaitGroup{}
-	requestTimeout = uint64(0)
 	for x := 1; x <= requests; x++ {
 		wg.Add(1)
 		go func(x int) {
@@ -95,8 +70,9 @@ func main() {
 			defer cancel()
 			var requestTimeoutError error
 			for y := 1; y <= redisJobPerRequest; y++ {
-				err := getKeyFromRedis(rb, fmt.Sprintf("%d%d", x, y), ctx)
+				err := getKeyFromRedis(rbc, fmt.Sprintf("%d%d", x, y), ctx)
 				if err != nil {
+					fmt.Println(err)
 					requestTimeoutError = err
 				}
 			}
@@ -119,50 +95,6 @@ func main() {
 	}
 }
 
-func multiExecRedis(rb redispipeline.RedisPipeline, i string, ctx context.Context) error {
-	_, err := rb.NewSession(ctx).
-		PushCommand("MULTI").             //response : {OK, <nil>}
-		PushCommand("SET", "testA%s", i). //response : {QUEUED, <nil>}
-		PushCommand("SET", "testB%s", i). // response : {QUEUED, <nil>}
-		PushCommand("SET", "testC%s", i). // response : {QUEUED, <nil>}
-		PushCommand("SET", "testD%s", i). // response : {QUEUED, <nil>}
-		PushCommand("SET", "testE%s", i). // response : {QUEUED, <nil>}
-		PushCommand("INCR", "test").
-		PushCommand("EXEC"). //response : {[1,1,1,1,1], <nil>}
-		Execute()
-	if err != nil {
-		return err
-	}
-	return nil
-	// `for _, resp := range resps {
-	// 	if resp.Err != nil {
-	// 		fmt.Println(resp.Err)
-	// 		continue
-	// 	}
-	// 	switch reply := resp.Value.(type) {
-	// 	case string:
-	// 		fmt.Println("multi/exec", reply)
-	// 	case int64:
-	// 		fmt.Println("multi/exec", reply)
-	// 	case float64:
-	// 		fmt.Println("multi/exec", reply)
-	// 	case []byte:
-	// 		fmt.Println("multi/exec", string(reply))
-	// 	case []interface{}:
-	// 		s := reflect.ValueOf(resp.Value)
-	// 		if s.Kind() != reflect.Slice {
-	// 			panic("InterfaceSlice() given a non-slice type")
-	// 		}
-	// 		ret := make([]interface{}, s.Len())
-	// 		for i := 0; i < s.Len(); i++ {
-	// 			ret[i] = s.Index(i).Interface()
-	// 			//you can cast from ret[i] to specific golang type
-	// 		}
-	// 		fmt.Println("multi/exec", ret)
-	// 	}
-	// }`
-}
-
 func getKeyFromRedis(rb redispipeline.RedisPipeline, i string, ctx context.Context) error {
 	_, err := rb.NewSession(ctx).
 		PushCommand("GET", fmt.Sprintf("testA%s", i)).
@@ -174,7 +106,6 @@ func getKeyFromRedis(rb redispipeline.RedisPipeline, i string, ctx context.Conte
 	if err != nil {
 		return err
 	}
-	return nil
 	/*
 	 Need to cast the response and error accordingly in sequential order
 	*/
@@ -185,15 +116,20 @@ func getKeyFromRedis(rb redispipeline.RedisPipeline, i string, ctx context.Conte
 	// 	}
 	// 	switch reply := resp.Value.(type) {
 	// 	case string:
-	// 		fmt.Println("get", reply)
+	// 		fmt.Println("cast to string")
+	// 		fmt.Println("expect", i, "get", reply)
 	// 	case int64:
-	// 		fmt.Println("get", reply)
+	// 		fmt.Println("cast to int")
+	// 		fmt.Println("expect", i, "get", reply)
 	// 	case float64:
-	// 		fmt.Println("get", reply)
+	// 		fmt.Println("cast to float")
+	// 		fmt.Println("expect", i, "get", reply)
 	// 	case []byte:
-	// 		fmt.Println("get", string(reply))
+	// 		fmt.Println("cast to byte")
+	// 		fmt.Println("expect", i, "get", string(reply))
 	// 	}
 	// }
+	return nil
 }
 
 func setKeyToRedis(rb redispipeline.RedisPipeline, i string, ctx context.Context) error {
@@ -207,7 +143,7 @@ func setKeyToRedis(rb redispipeline.RedisPipeline, i string, ctx context.Context
 	if err != nil {
 		return err
 	}
-	return nil
+	// return nil
 	/*
 	 Need to cast the response and error accordingly in sequential order
 	*/
@@ -218,13 +154,18 @@ func setKeyToRedis(rb redispipeline.RedisPipeline, i string, ctx context.Context
 	// 	}
 	// 	switch reply := resp.Value.(type) {
 	// 	case string:
-	// 		fmt.Println("set", reply)
+	// 		fmt.Println("cast to string")
+	// 		fmt.Println("expect", i, "get", reply)
 	// 	case int64:
-	// 		fmt.Println("set", reply)
+	// 		fmt.Println("cast to int")
+	// 		fmt.Println("expect", i, "get", reply)
 	// 	case float64:
-	// 		fmt.Println("set", reply)
+	// 		fmt.Println("cast to float")
+	// 		fmt.Println("expect", i, "get", reply)
 	// 	case []byte:
-	// 		fmt.Println("set", string(reply))
+	// 		fmt.Println("cast to byte")
+	// 		fmt.Println("expect", i, "get", string(reply))
 	// 	}
 	// }
+	return nil
 }
