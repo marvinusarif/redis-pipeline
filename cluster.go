@@ -46,7 +46,7 @@ func initRedisPipelineCluster(hosts string, maxConn int, maxCommandsPerBatch uin
 		})
 		rbc = &RedisPipelineClusterImpl{
 			cluster:             cluster,
-			interval:            time.Duration(10) * time.Millisecond,
+			interval:            time.Duration(20) * time.Millisecond,
 			maxCommandsPerBatch: maxCommandsPerBatch,
 			sessionChan:         make(chan *Session, maxConn*10),
 			flushChan:           make(chan []*Session, maxConn),
@@ -156,14 +156,13 @@ func (rbc *RedisPipelineClusterImpl) flush(sessions []*Session) {
 			}
 		} else {
 			for _, session := range sentSessions {
-				var sessErr error
 				var cmdresponses []*CommandResponse
 				for _ = range session.commands {
 					var resp interface{}
 					resp, reply = reply[0], reply[1:]
 					cmdresponses = append(cmdresponses, &CommandResponse{resp, err})
 				}
-				go session.reply(cmdresponses, sessErr)
+				go session.reply(cmdresponses, nil)
 			}
 		}
 	}

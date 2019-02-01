@@ -21,22 +21,23 @@ func main() {
 	}
 	log.SetFlags(log.Llongfile | log.Ldate | log.Ltime)
 
-	redisHost := "127.0.0.1:30001;127.0.0.1:30002;127.0.0.1:30003;127.0.0.1:30004;127.0.0.1:30005;127.0.0.1:30006"
-	// redisHost := "127.0.0.1:30001;127.0.0.1:30002;127.0.0.1:30003"
+	// redisHost := "127.0.0.1:30001;127.0.0.1:30002;127.0.0.1:30003;127.0.0.1:30004;127.0.0.1:30005;127.0.0.1:30006"
+	redisHost := "127.0.0.1:30001;127.0.0.1:30002;127.0.0.1:30003"
 	maxConn := 200
-	maxCommandsBatch := uint64(200)
+	maxCommandsBatch := uint64(100)
 
 	rbc, err := redispipeline.NewRedisPipeline(redispipeline.CLUSTER_MODE, redisHost, maxConn, maxCommandsBatch)
 	if err != nil {
 		log.Println(err)
 	}
 
-	fmt.Println("starting get session")
-	requests := 10000
+	var requestTimeout uint64
+	requests := 20000
 	redisJobPerRequest := 4
+	fmt.Println("starting SET session")
 	now := time.Now()
 	wg := &sync.WaitGroup{}
-	requestTimeout := uint64(0)
+	requestTimeout = uint64(0)
 	for x := 1; x <= requests; x++ {
 		wg.Add(1)
 		go func(x int) {
@@ -59,9 +60,10 @@ func main() {
 	wg.Wait()
 	fmt.Println("timeout requests :", requestTimeout)
 	fmt.Println(time.Since(now))
-	fmt.Println("ending get session")
+	fmt.Println("ending SET session")
 
 	fmt.Println("starting get session")
+	requestTimeout = uint64(0)
 	for x := 1; x <= requests; x++ {
 		wg.Add(1)
 		go func(x int) {

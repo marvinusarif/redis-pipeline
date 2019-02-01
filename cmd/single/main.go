@@ -28,9 +28,9 @@ func main() {
 	}
 	log.SetFlags(log.Llongfile | log.Ldate | log.Ltime)
 
-	redisHost := "localhost:6380"
+	redisHost := "localhost:30008"
 	maxConn := 200
-	maxCommandsBatch := uint64(200)
+	maxCommandsBatch := uint64(100)
 
 	rb, err := redispipeline.NewRedisPipeline(redispipeline.SINGLE_MODE, redisHost, maxConn, maxCommandsBatch)
 	if err != nil {
@@ -40,11 +40,12 @@ func main() {
 		simulates concurrent rps
 	*/
 	var requestTimeout uint64
-	requests := 10
+	requests := 20000
 	redisJobPerRequest := 4
-	fmt.Println("starting multi/exec session")
+	fmt.Println("starting MULTI/EXEC session")
 	now := time.Now()
 	wg := &sync.WaitGroup{}
+	requestTimeout = uint64(0)
 	for x := 1; x <= requests; x++ {
 		wg.Add(1)
 		go func(x int) {
@@ -66,9 +67,9 @@ func main() {
 	}
 	wg.Wait()
 	fmt.Println(time.Since(now))
-	fmt.Println("ending multi/exec session")
+	fmt.Println("ending MULTI/EXEC session")
 
-	fmt.Println("starting set session")
+	fmt.Println("starting SET session")
 	now = time.Now()
 	wg = &sync.WaitGroup{}
 	requestTimeout = uint64(0)
@@ -94,9 +95,9 @@ func main() {
 	wg.Wait()
 	fmt.Println("timeout requests :", requestTimeout)
 	fmt.Println(time.Since(now))
-	fmt.Println("ending set session")
+	fmt.Println("ending SET session")
 
-	fmt.Println("starting get session")
+	fmt.Println("starting GET session")
 	now = time.Now()
 	wg = &sync.WaitGroup{}
 	requestTimeout = uint64(0)
@@ -122,7 +123,7 @@ func main() {
 	wg.Wait()
 	fmt.Println("timeout requests :", requestTimeout)
 	fmt.Println(time.Since(now))
-	fmt.Println("ending get session")
+	fmt.Println("ending GET session")
 
 	// create term so the app didn't exit
 	term := make(chan os.Signal, 1)

@@ -42,7 +42,7 @@ func initRedisPipeline(host string, maxConn int, maxCommandsPerBatch uint64) (*R
 
 		rb = &RedisPipelineImpl{
 			//must be larger than client timeout
-			interval:            time.Duration(10) * time.Millisecond,
+			interval:            time.Duration(20) * time.Millisecond,
 			pool:                pool,
 			maxCommandsPerBatch: maxCommandsPerBatch,
 			sessionChan:         make(chan *Session, pool.MaxActive*10),
