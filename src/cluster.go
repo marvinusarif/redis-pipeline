@@ -2,65 +2,35 @@ package redispipeline
 
 import (
 	"context"
-	"strings"
 	"sync"
 	"time"
 
-	rc "github.com/chasex/redis-go-cluster"
+	redis "github.com/redis-pipeline/adapter"
 )
 
 var rbc *RedisPipelineClusterImpl
 
 type RedisPipelineClusterImpl struct {
 	interval            time.Duration
-	cluster             *rc.Cluster
+	client              redis.RedisClient
 	maxCommandsPerBatch uint64
 	sessionChan         chan *Session
 	flushChan           chan []*Session
 	maxActive           int
 }
 
-type RedisPipelineClusterSessionImpl struct {
-	pipelineHub *RedisPipelineClusterImpl
-	ctx         context.Context
-	session     *Session
-}
-
-func initRedisPipelineCluster(hosts string, maxConn int, maxCommandsPerBatch uint64) (*RedisPipelineClusterImpl, error) {
-	var (
-		err     error
-		cluster *rc.Cluster
-	)
-
-	once.Do(func() {
-		startNodes := strings.FieldsFunc(strings.Replace(hosts, " ", "", -1), func(r rune) bool {
-			return r == ';' || r == ','
-		})
-		cluster, err = rc.NewCluster(&rc.Options{
-			StartNodes:   startNodes,
-			ConnTimeout:  5 * time.Second,
-			ReadTimeout:  3 * time.Second,
-			WriteTimeout: 3 * time.Second,
-			KeepAlive:    maxConn,
-			AliveTime:    8 * time.Second,
-		})
-		rbc = &RedisPipelineClusterImpl{
-			cluster:             cluster,
-			interval:            time.Duration(20) * time.Millisecond,
-			maxCommandsPerBatch: maxCommandsPerBatch,
-			sessionChan:         make(chan *Session, maxConn*10),
-			flushChan:           make(chan []*Session, maxConn),
-			maxActive:           maxConn,
-		}
-		go rbc.createListener()
-		rbc.createFlushers()
-	})
-
-	if err != nil {
-		return nil, err
+func initRedisPipelineCluster(client redis.RedisClient, maxCommandsPerBatch uint64) *RedisPipelineClusterImpl {
+	rbc = &RedisPipelineClusterImpl{
+		client:              client,
+		interval:            time.Duration(20) * time.Millisecond,
+		maxCommandsPerBatch: maxCommandsPerBatch,
+		sessionChan:         make(chan *Session, client.GetMaxConn()*10),
+		flushChan:           make(chan []*Session, client.GetMaxConn()),
+		maxActive:           client.GetMaxConn(),
 	}
-
-	return rbc, nil
+	go rbc.createListener()
+	rbc.createFlushers()
+	return rbc
 }
 
 func (rbc *RedisPipelineClusterImpl) createListener() {
@@ -100,6 +70,7 @@ func (rbc *RedisPipelineClusterImpl) NewSession(ctx context.Context) RedisPipeli
 		ctx = context.Background()
 	}
 	return &RedisPipelineSessionImpl{
+		mode:               rbc.client.GetMode(),
 		pipelineHub:        nil,
 		pipelineClusterHub: rbc,
 		ctx:                ctx,
@@ -129,7 +100,7 @@ func (rbc *RedisPipelineClusterImpl) newFlusher(flushChan chan []*Session) {
 
 func (rbc *RedisPipelineClusterImpl) flush(sessions []*Session) {
 	sentSessions := make([]*Session, 0)
-	batch := rbc.cluster.NewBatch()
+	batch := rbc.client.NewBatch()
 	for _, session := range sessions {
 		if session.status.startProcessIfAllowed() == true {
 			var sessErr error
@@ -149,7 +120,7 @@ func (rbc *RedisPipelineClusterImpl) flush(sessions []*Session) {
 		}
 	}
 	if len(sentSessions) > 0 {
-		reply, err := rbc.cluster.RunBatch(batch)
+		reply, err := rbc.client.RunBatch(batch)
 		if err != nil {
 			for _, session := range sentSessions {
 				go session.reply(nil, err)

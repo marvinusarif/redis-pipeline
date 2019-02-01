@@ -1,5 +1,31 @@
-72097:C 01 Feb 2019 10:38:09.389 # oO0OoO0OoO0Oo Redis is starting oO0OoO0OoO0Oo
-72097:C 01 Feb 2019 10:38:09.389 # Redis version=5.0.1, bits=64, commit=00000000, modified=0, pid=72097, just started
-72097:C 01 Feb 2019 10:38:09.389 # Configuration loaded
-72098:M 01 Feb 2019 10:38:09.392 * Increased maximum number of open files to 10032 (it was originally set to 256).
-72098:M 01 Feb 2019 10:38:09.394 # Creating Server TCP listening socket *:30004: bind: Address already in use
+42847:C 01 Feb 2019 21:41:59.620 # oO0OoO0OoO0Oo Redis is starting oO0OoO0OoO0Oo
+42847:C 01 Feb 2019 21:41:59.621 # Redis version=5.0.1, bits=64, commit=00000000, modified=0, pid=42847, just started
+42847:C 01 Feb 2019 21:41:59.621 # Configuration loaded
+42848:M 01 Feb 2019 21:41:59.623 * Increased maximum number of open files to 10032 (it was originally set to 256).
+42848:M 01 Feb 2019 21:41:59.624 * No cluster configuration found, I'm 71b7942b464b753746ee8fe400165b20c5c02ac8
+42848:M 01 Feb 2019 21:41:59.625 * Running mode=cluster, port=30004.
+42848:M 01 Feb 2019 21:41:59.625 # Server initialized
+42848:M 01 Feb 2019 21:41:59.625 * Ready to accept connections
+42848:M 01 Feb 2019 21:42:03.127 # configEpoch set to 4 via CLUSTER SET-CONFIG-EPOCH
+42848:M 01 Feb 2019 21:42:03.254 # IP address for this node updated to 127.0.0.1
+42848:S 01 Feb 2019 21:42:05.143 * Before turning into a replica, using my master parameters to synthesize a cached master: I may be able to synchronize with the new master with just a partial transfer.
+42848:S 01 Feb 2019 21:42:05.143 # Cluster state changed: ok
+42848:S 01 Feb 2019 21:42:05.700 * Connecting to MASTER 127.0.0.1:30001
+42848:S 01 Feb 2019 21:42:05.701 * MASTER <-> REPLICA sync started
+42848:S 01 Feb 2019 21:42:05.701 * Non blocking connect for SYNC fired the event.
+42848:S 01 Feb 2019 21:42:05.701 * Master replied to PING, replication can continue...
+42848:S 01 Feb 2019 21:42:05.702 * Trying a partial resynchronization (request 9aa304ba43fe2dd5d8d34beb969ffa6ad4c4bfd8:1).
+42848:S 01 Feb 2019 21:42:05.704 * Full resync from master: a818ad654829ba05d660cdc6497069080e109bf5:0
+42848:S 01 Feb 2019 21:42:05.704 * Discarding previously cached master state.
+42848:S 01 Feb 2019 21:42:05.781 * MASTER <-> REPLICA sync: receiving 175 bytes from master
+42848:S 01 Feb 2019 21:42:05.783 * MASTER <-> REPLICA sync: Flushing old data
+42848:S 01 Feb 2019 21:42:05.783 * MASTER <-> REPLICA sync: Loading DB in memory
+42848:S 01 Feb 2019 21:42:05.783 * MASTER <-> REPLICA sync: Finished with success
+42848:S 01 Feb 2019 21:42:05.784 * Background append only file rewriting started by pid 42882
+42848:S 01 Feb 2019 21:42:05.807 * AOF rewrite child asks to stop sending diffs.
+42882:C 01 Feb 2019 21:42:05.807 * Parent agreed to stop sending diffs. Finalizing AOF...
+42882:C 01 Feb 2019 21:42:05.807 * Concatenating 0.00 MB of AOF diff received from parent.
+42882:C 01 Feb 2019 21:42:05.807 * SYNC append only file rewrite performed
+42848:S 01 Feb 2019 21:42:05.903 * Background AOF rewrite terminated with success
+42848:S 01 Feb 2019 21:42:05.903 * Residual parent diff successfully flushed to the rewritten AOF (0.00 MB)
+42848:S 01 Feb 2019 21:42:05.904 * Background AOF rewrite finished successfully

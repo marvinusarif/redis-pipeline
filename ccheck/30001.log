@@ -1,5 +1,18 @@
-72091:C 01 Feb 2019 10:38:09.358 # oO0OoO0OoO0Oo Redis is starting oO0OoO0OoO0Oo
-72091:C 01 Feb 2019 10:38:09.359 # Redis version=5.0.1, bits=64, commit=00000000, modified=0, pid=72091, just started
-72091:C 01 Feb 2019 10:38:09.359 # Configuration loaded
-72092:M 01 Feb 2019 10:38:09.361 * Increased maximum number of open files to 10032 (it was originally set to 256).
-72092:M 01 Feb 2019 10:38:09.362 # Creating Server TCP listening socket *:30001: bind: Address already in use
+42841:C 01 Feb 2019 21:41:59.594 # oO0OoO0OoO0Oo Redis is starting oO0OoO0OoO0Oo
+42841:C 01 Feb 2019 21:41:59.595 # Redis version=5.0.1, bits=64, commit=00000000, modified=0, pid=42841, just started
+42841:C 01 Feb 2019 21:41:59.595 # Configuration loaded
+42842:M 01 Feb 2019 21:41:59.598 * Increased maximum number of open files to 10032 (it was originally set to 256).
+42842:M 01 Feb 2019 21:41:59.600 * No cluster configuration found, I'm f59b9c4ed0dee085633db4ac8070f4cc47ebd47c
+42842:M 01 Feb 2019 21:41:59.609 * Running mode=cluster, port=30001.
+42842:M 01 Feb 2019 21:41:59.610 # Server initialized
+42842:M 01 Feb 2019 21:41:59.610 * Ready to accept connections
+42842:M 01 Feb 2019 21:42:03.126 # configEpoch set to 1 via CLUSTER SET-CONFIG-EPOCH
+42842:M 01 Feb 2019 21:42:03.154 # IP address for this node updated to 127.0.0.1
+42842:M 01 Feb 2019 21:42:05.072 # Cluster state changed: ok
+42842:M 01 Feb 2019 21:42:05.702 * Replica 127.0.0.1:30004 asks for synchronization
+42842:M 01 Feb 2019 21:42:05.702 * Partial resynchronization not accepted: Replication ID mismatch (Replica asked for '9aa304ba43fe2dd5d8d34beb969ffa6ad4c4bfd8', my replication IDs are '703dd71361fdd983e1599e916b5cbda03d5b64d7' and '0000000000000000000000000000000000000000')
+42842:M 01 Feb 2019 21:42:05.703 * Starting BGSAVE for SYNC with target: disk
+42842:M 01 Feb 2019 21:42:05.703 * Background saving started by pid 42877
+42877:C 01 Feb 2019 21:42:05.704 * DB saved on disk
+42842:M 01 Feb 2019 21:42:05.781 * Background saving terminated with success
+42842:M 01 Feb 2019 21:42:05.783 * Synchronization with replica 127.0.0.1:30004 succeeded

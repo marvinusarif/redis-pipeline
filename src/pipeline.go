@@ -2,13 +2,12 @@ package redispipeline
 
 import (
 	"context"
-	"sync"
+
+	redis "github.com/redis-pipeline/adapter"
 )
 
 const (
 	DEFAULT_MAX_COMMAND_PER_BATCH uint64 = 100
-	CLUSTER_MODE                  int    = iota
-	SINGLE_MODE
 )
 
 type RedisPipeline interface {
@@ -16,17 +15,15 @@ type RedisPipeline interface {
 	createListener()
 }
 
-var once sync.Once
-
-func NewRedisPipeline(pipelineMode int, host string, maxConn int, maxCommandsPerBatch uint64) (RedisPipeline, error) {
+func NewRedisPipeline(client redis.RedisClient, maxCommandsPerBatch uint64) RedisPipeline {
 	if maxCommandsPerBatch < 1 {
 		maxCommandsPerBatch = DEFAULT_MAX_COMMAND_PER_BATCH
 	}
-	switch pipelineMode {
-	case CLUSTER_MODE:
-		return initRedisPipelineCluster(host, maxConn, maxCommandsPerBatch)
+	switch client.GetMode() {
+	case redis.CLUSTER_MODE:
+		return initRedisPipelineCluster(client, maxCommandsPerBatch)
 	default: //SINGLE_MODE
-		return initRedisPipeline(host, maxConn, maxCommandsPerBatch)
+		return initRedisPipeline(client, maxCommandsPerBatch)
 	}
 }
 

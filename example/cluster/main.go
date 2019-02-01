@@ -12,7 +12,8 @@ import (
 	"time"
 
 	"github.com/google/gops/agent"
-	redispipeline "github.com/redis-pipeline"
+	redis "github.com/redis-pipeline/adapter"
+	redispipeline "github.com/redis-pipeline/src"
 )
 
 func main() {
@@ -26,13 +27,14 @@ func main() {
 	maxConn := 200
 	maxCommandsBatch := uint64(100)
 
-	rbc, err := redispipeline.NewRedisPipeline(redispipeline.CLUSTER_MODE, redisHost, maxConn, maxCommandsBatch)
+	client, err := redis.New(redis.CLUSTER_MODE, redisHost, maxConn)
 	if err != nil {
 		log.Println(err)
 	}
+	rbc := redispipeline.NewRedisPipeline(client, maxCommandsBatch)
 
 	var requestTimeout uint64
-	requests := 20000
+	requests := 1000
 	redisJobPerRequest := 4
 	fmt.Println("starting SET session")
 	now := time.Now()
@@ -98,7 +100,7 @@ func main() {
 }
 
 func getKeyFromRedis(rb redispipeline.RedisPipeline, i string, ctx context.Context) error {
-	_, err := rb.NewSession(ctx).
+	resps, err := rb.NewSession(ctx).
 		PushCommand("GET", fmt.Sprintf("testA%s", i)).
 		PushCommand("GET", fmt.Sprintf("testB%s", i)).
 		PushCommand("GET", fmt.Sprintf("testC%s", i)).
@@ -111,31 +113,31 @@ func getKeyFromRedis(rb redispipeline.RedisPipeline, i string, ctx context.Conte
 	/*
 	 Need to cast the response and error accordingly in sequential order
 	*/
-	// for _, resp := range resps {
-	// 	if resp.Err != nil {
-	// 		fmt.Println(resp.Err)
-	// 		continue
-	// 	}
-	// 	switch reply := resp.Value.(type) {
-	// 	case string:
-	// 		fmt.Println("cast to string")
-	// 		fmt.Println("expect", i, "get", reply)
-	// 	case int64:
-	// 		fmt.Println("cast to int")
-	// 		fmt.Println("expect", i, "get", reply)
-	// 	case float64:
-	// 		fmt.Println("cast to float")
-	// 		fmt.Println("expect", i, "get", reply)
-	// 	case []byte:
-	// 		fmt.Println("cast to byte")
-	// 		fmt.Println("expect", i, "get", string(reply))
-	// 	}
-	// }
+	for _, resp := range resps {
+		if resp.Err != nil {
+			fmt.Println(resp.Err)
+			continue
+		}
+		switch reply := resp.Value.(type) {
+		case string:
+			fmt.Println("cast to string")
+			fmt.Println("expect", i, "get", reply)
+		case int64:
+			fmt.Println("cast to int")
+			fmt.Println("expect", i, "get", reply)
+		case float64:
+			fmt.Println("cast to float")
+			fmt.Println("expect", i, "get", reply)
+		case []byte:
+			fmt.Println("cast to byte")
+			fmt.Println("expect", i, "get", string(reply))
+		}
+	}
 	return nil
 }
 
 func setKeyToRedis(rb redispipeline.RedisPipeline, i string, ctx context.Context) error {
-	_, err := rb.NewSession(ctx).
+	resps, err := rb.NewSession(ctx).
 		PushCommand("SET", fmt.Sprintf("testA%s", i), i).
 		PushCommand("SET", fmt.Sprintf("testB%s", i), i).
 		PushCommand("SET", fmt.Sprintf("testC%s", i), i).
@@ -149,25 +151,25 @@ func setKeyToRedis(rb redispipeline.RedisPipeline, i string, ctx context.Context
 	/*
 	 Need to cast the response and error accordingly in sequential order
 	*/
-	// for _, resp := range resps {
-	// 	if resp.Err != nil {
-	// 		fmt.Println(resp.Err)
-	// 		continue
-	// 	}
-	// 	switch reply := resp.Value.(type) {
-	// 	case string:
-	// 		fmt.Println("cast to string")
-	// 		fmt.Println("expect", i, "get", reply)
-	// 	case int64:
-	// 		fmt.Println("cast to int")
-	// 		fmt.Println("expect", i, "get", reply)
-	// 	case float64:
-	// 		fmt.Println("cast to float")
-	// 		fmt.Println("expect", i, "get", reply)
-	// 	case []byte:
-	// 		fmt.Println("cast to byte")
-	// 		fmt.Println("expect", i, "get", string(reply))
-	// 	}
-	// }
+	for _, resp := range resps {
+		if resp.Err != nil {
+			fmt.Println(resp.Err)
+			continue
+		}
+		switch reply := resp.Value.(type) {
+		case string:
+			fmt.Println("cast to string")
+			fmt.Println("expect", i, "get", reply)
+		case int64:
+			fmt.Println("cast to int")
+			fmt.Println("expect", i, "get", reply)
+		case float64:
+			fmt.Println("cast to float")
+			fmt.Println("expect", i, "get", reply)
+		case []byte:
+			fmt.Println("cast to byte")
+			fmt.Println("expect", i, "get", string(reply))
+		}
+	}
 	return nil
 }

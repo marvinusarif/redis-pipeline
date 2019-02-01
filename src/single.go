@@ -2,56 +2,35 @@ package redispipeline
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"time"
 
-	redis "github.com/gomodule/redigo/redis"
+	redis "github.com/redis-pipeline/adapter"
 )
 
 var rb *RedisPipelineImpl
 
 type RedisPipelineImpl struct {
 	interval            time.Duration
-	pool                *redis.Pool
+	client              redis.RedisClient
+	maxConn             int
 	maxCommandsPerBatch uint64
 	sessionChan         chan *Session
 	flushChan           chan []*Session
 }
 
-func initRedisPipeline(host string, maxConn int, maxCommandsPerBatch uint64) (*RedisPipelineImpl, error) {
-	once.Do(func() {
-		pool := &redis.Pool{
-			MaxActive:   maxConn,
-			MaxIdle:     maxConn,
-			IdleTimeout: 8 * time.Second,
-			TestOnBorrow: func(c redis.Conn, t time.Time) error {
-				_, err := c.Do("PING")
-				return err
-			},
-			Wait: true,
-			Dial: func() (redis.Conn, error) {
-				c, err := redis.Dial("tcp", host, redis.DialConnectTimeout(5*time.Second))
-				if err != nil {
-					fmt.Println(err)
-					return nil, err
-				}
-				return c, err
-			},
-		}
-
-		rb = &RedisPipelineImpl{
-			//must be larger than client timeout
-			interval:            time.Duration(20) * time.Millisecond,
-			pool:                pool,
-			maxCommandsPerBatch: maxCommandsPerBatch,
-			sessionChan:         make(chan *Session, pool.MaxActive*10),
-			flushChan:           make(chan []*Session, pool.MaxActive),
-		}
-		go rb.createListener()
-		rb.createFlushers()
-	})
-	return rb, nil
+func initRedisPipeline(client redis.RedisClient, maxCommandsPerBatch uint64) *RedisPipelineImpl {
+	rb = &RedisPipelineImpl{
+		interval:            time.Duration(10) * time.Millisecond,
+		client:              client,
+		maxConn:             client.GetMaxConn(),
+		maxCommandsPerBatch: maxCommandsPerBatch,
+		sessionChan:         make(chan *Session, client.GetMaxConn()*10),
+		flushChan:           make(chan []*Session, client.GetMaxConn()),
+	}
+	go rb.createListener()
+	rb.createFlushers()
+	return rb
 }
 
 func (rb *RedisPipelineImpl) createListener() {
@@ -91,6 +70,7 @@ func (rb *RedisPipelineImpl) NewSession(ctx context.Context) RedisPipelineSessio
 		ctx = context.Background()
 	}
 	return &RedisPipelineSessionImpl{
+		mode:               rb.client.GetMode(),
 		pipelineHub:        rb,
 		pipelineClusterHub: nil,
 		ctx:                ctx,
@@ -107,7 +87,7 @@ func (rb *RedisPipelineImpl) NewSession(ctx context.Context) RedisPipelineSessio
 }
 
 func (rb *RedisPipelineImpl) createFlushers() {
-	for i := 0; i < rb.pool.MaxActive; i++ {
+	for i := 0; i < rb.maxConn; i++ {
 		go rb.newFlusher(rb.flushChan)
 	}
 }
@@ -119,12 +99,10 @@ func (rb *RedisPipelineImpl) newFlusher(flushChan chan []*Session) {
 }
 
 func (rb *RedisPipelineImpl) flush(sessions []*Session) {
-	// fmt.Println("flush")
 	sentSessions := make([]*Session, 0)
-	conn := rb.pool.Get()
+	conn := rb.client.GetConn()
 	defer conn.Close()
 
-	// now := time.Now()
 	for _, session := range sessions {
 		if session.status.startProcessIfAllowed() == true {
 			var sessErr error
@@ -154,17 +132,12 @@ func (rb *RedisPipelineImpl) flush(sessions []*Session) {
 			for _, session := range sentSessions {
 				var sessErr error
 				var cmdresponses []*CommandResponse
-				// go session.reply(nil, nil)
 				for _ = range session.commands {
-					// now = time.Now()
 					resp, err := conn.Receive()
-					// log.Println("time receive :", time.Since(now))
 					if err != nil {
 						sessErr = err
 					}
-					// now = time.Now()
 					cmdresponses = append(cmdresponses, &CommandResponse{resp, err})
-					// log.Println("time append :", time.Since(now))
 				}
 				go session.reply(cmdresponses, sessErr)
 			}
