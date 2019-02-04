@@ -1,8 +1,9 @@
 package redisadapter
 
 import (
+	"sync"
+
 	rc "github.com/chasex/redis-go-cluster"
-	"github.com/gomodule/redigo/redis"
 )
 
 const (
@@ -11,23 +12,34 @@ const (
 )
 
 type RedisClient interface {
-	GetMode() int
 	GetMaxConn() int
-	GetConn() redis.Conn
-	NewBatch() *rc.Batch
-	RunBatch(*rc.Batch) ([]interface{}, error)
+	NewBatch() string
+	RunBatch(string) ([]interface{}, error)
+	Send(string, string, ...interface{}) error
 }
 
-func New(mode int, host string, maxConn int) (RedisClient, error) {
+func New(mode int, host string, maxConn int) RedisClient {
 	switch mode {
 	case CLUSTER_MODE:
-		c := &RedisClusterClientImpl{mode: mode, host: host, maxConn: maxConn}
-		err := c.CreateCluster()
-		return c, err
+		c := &RedisClusterClientImpl{
+			mu:      &sync.RWMutex{},
+			mode:    mode,
+			host:    host,
+			maxConn: maxConn,
+			batches: make(map[string]*rc.Batch),
+			cluster: createCluster(host, maxConn),
+		}
+		return c
 
 	default:
-		r := &RedisClientImpl{mode: mode, host: host, maxConn: maxConn}
-		err := r.CreatePool()
-		return r, err
+		r := &RedisClientImpl{
+			mu:      &sync.RWMutex{},
+			mode:    mode,
+			host:    host,
+			maxConn: maxConn,
+			batches: make(map[string]*batch),
+			pool:    createPool(host, maxConn),
+		}
+		return r
 	}
 }

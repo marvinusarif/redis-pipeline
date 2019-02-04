@@ -8,7 +8,21 @@ import (
 	redis "github.com/redis-pipeline/adapter"
 )
 
-var rb *RedisPipelineImpl
+const (
+	DEFAULT_MAX_COMMAND_PER_BATCH uint64 = 100
+)
+
+type RedisPipeline interface {
+	NewSession(ctx context.Context) RedisPipelineSession
+	createListener()
+}
+
+func NewRedisPipeline(client redis.RedisClient, maxCommandsPerBatch uint64) RedisPipeline {
+	if maxCommandsPerBatch < 1 {
+		maxCommandsPerBatch = DEFAULT_MAX_COMMAND_PER_BATCH
+	}
+	return initRedisPipeline(client, maxCommandsPerBatch)
+}
 
 type RedisPipelineImpl struct {
 	interval            time.Duration
@@ -20,9 +34,9 @@ type RedisPipelineImpl struct {
 }
 
 func initRedisPipeline(client redis.RedisClient, maxCommandsPerBatch uint64) *RedisPipelineImpl {
-	rb = &RedisPipelineImpl{
-		interval:            time.Duration(10) * time.Millisecond,
+	rb := &RedisPipelineImpl{
 		client:              client,
+		interval:            time.Duration(10) * time.Millisecond,
 		maxConn:             client.GetMaxConn(),
 		maxCommandsPerBatch: maxCommandsPerBatch,
 		sessionChan:         make(chan *Session, client.GetMaxConn()*10),
@@ -70,10 +84,8 @@ func (rb *RedisPipelineImpl) NewSession(ctx context.Context) RedisPipelineSessio
 		ctx = context.Background()
 	}
 	return &RedisPipelineSessionImpl{
-		mode:               rb.client.GetMode(),
-		pipelineHub:        rb,
-		pipelineClusterHub: nil,
-		ctx:                ctx,
+		pipelineHub: rb,
+		ctx:         ctx,
 		session: &Session{
 			status: &Status{
 				mu:            &sync.Mutex{},
@@ -100,15 +112,14 @@ func (rb *RedisPipelineImpl) newFlusher(flushChan chan []*Session) {
 
 func (rb *RedisPipelineImpl) flush(sessions []*Session) {
 	sentSessions := make([]*Session, 0)
-	conn := rb.client.GetConn()
-	defer conn.Close()
+	batchName := rb.client.NewBatch()
 
 	for _, session := range sessions {
 		if session.status.startProcessIfAllowed() == true {
 			var sessErr error
 			var cmdresponses []*CommandResponse
 			for _, cmd := range session.commands {
-				err := conn.Send(cmd.commandName, cmd.args...)
+				err := rb.client.Send(batchName, cmd.commandName, cmd.args...)
 				if err != nil {
 					sessErr = err
 				}
@@ -123,23 +134,22 @@ func (rb *RedisPipelineImpl) flush(sessions []*Session) {
 	}
 
 	if len(sentSessions) > 0 {
-		err := conn.Flush()
+		reply, err := rb.client.RunBatch(batchName)
 		if err != nil {
 			for _, session := range sentSessions {
 				go session.reply(nil, err)
 			}
 		} else {
+			var ctr int
 			for _, session := range sentSessions {
-				var sessErr error
 				var cmdresponses []*CommandResponse
 				for _ = range session.commands {
-					resp, err := conn.Receive()
-					if err != nil {
-						sessErr = err
-					}
+					var resp interface{}
+					resp = reply[ctr]
+					ctr++
 					cmdresponses = append(cmdresponses, &CommandResponse{resp, err})
 				}
-				go session.reply(cmdresponses, sessErr)
+				go session.reply(cmdresponses, nil)
 			}
 		}
 	}
@@ -155,4 +165,28 @@ func (rb *RedisPipelineImpl) sendToPipelineHub(session *Session) {
 
 func (rb *RedisPipelineImpl) sendToFlusher(sessions []*Session) {
 	rb.flushChan <- sessions
+}
+
+func (s *Session) reply(cmdresp []*CommandResponse, err error) {
+	s.responseChan <- &SessionResponse{CommandsResponses: cmdresp, Err: err}
+}
+
+func (s *Status) startProcessIfAllowed() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.shouldProcess {
+		s.cancellable = false
+		return true
+	}
+	return false
+}
+
+func (s *Status) stopProcessIfAllowed() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.cancellable {
+		s.shouldProcess = false
+		return true
+	}
+	return false
 }

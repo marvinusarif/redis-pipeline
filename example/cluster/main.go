@@ -12,8 +12,8 @@ import (
 	"time"
 
 	"github.com/google/gops/agent"
+	redispipeline "github.com/redis-pipeline"
 	redis "github.com/redis-pipeline/adapter"
-	redispipeline "github.com/redis-pipeline/src"
 )
 
 func main() {
@@ -27,14 +27,11 @@ func main() {
 	maxConn := 200
 	maxCommandsBatch := uint64(100)
 
-	client, err := redis.New(redis.CLUSTER_MODE, redisHost, maxConn)
-	if err != nil {
-		log.Println(err)
-	}
+	client := redis.New(redis.CLUSTER_MODE, redisHost, maxConn)
 	rbc := redispipeline.NewRedisPipeline(client, maxCommandsBatch)
 
 	var requestTimeout uint64
-	requests := 1000
+	requests := 5000
 	redisJobPerRequest := 4
 	fmt.Println("starting SET session")
 	now := time.Now()

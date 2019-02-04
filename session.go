@@ -3,8 +3,6 @@ package redispipeline
 import (
 	"context"
 	"sync"
-
-	redis "github.com/redis-pipeline/adapter"
 )
 
 type RedisPipelineSession interface {
@@ -13,11 +11,9 @@ type RedisPipelineSession interface {
 }
 
 type RedisPipelineSessionImpl struct {
-	mode               int
-	pipelineClusterHub *RedisPipelineClusterImpl
-	pipelineHub        *RedisPipelineImpl
-	ctx                context.Context
-	session            *Session
+	pipelineHub *RedisPipelineImpl
+	ctx         context.Context
+	session     *Session
 }
 
 type Command struct {
@@ -57,11 +53,7 @@ func (ps *RedisPipelineSessionImpl) PushCommand(command string, args ...interfac
 }
 
 func (ps *RedisPipelineSessionImpl) Execute() ([]*CommandResponse, error) {
-	if ps.mode == redis.SINGLE_MODE {
-		go ps.pipelineHub.sendToPipelineHub(ps.session)
-	} else {
-		go ps.pipelineClusterHub.sendToPipelineHub(ps.session)
-	}
+	go ps.pipelineHub.sendToPipelineHub(ps.session)
 	return ps.waitResponse()
 }
 

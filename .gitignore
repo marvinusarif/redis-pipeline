@@ -1,1 +1,5 @@
-/vendor
+vendor
+ccheck/*.rdb
+ccheck/*.log
+ccheck/*.aof
+ccheck/*.conf
