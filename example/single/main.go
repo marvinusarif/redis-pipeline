@@ -39,7 +39,7 @@ func main() {
 		simulates concurrent rps
 	*/
 	var requestTimeout uint64
-	requests := 5000
+	requests := 3000
 	redisJobPerRequest := 4
 	fmt.Println("starting MULTI/EXEC session")
 	now := time.Now()
@@ -65,6 +65,7 @@ func main() {
 		}(x)
 	}
 	wg.Wait()
+	fmt.Println("timeout requests on MULTI/EXEC :", requestTimeout)
 	fmt.Println(time.Since(now))
 	fmt.Println("ending MULTI/EXEC session")
 
@@ -92,7 +93,7 @@ func main() {
 		}(x)
 	}
 	wg.Wait()
-	fmt.Println("timeout requests :", requestTimeout)
+	fmt.Println("timeout requests on SET :", requestTimeout)
 	fmt.Println(time.Since(now))
 	fmt.Println("ending SET session")
 
@@ -120,7 +121,7 @@ func main() {
 		}(x)
 	}
 	wg.Wait()
-	fmt.Println("timeout requests :", requestTimeout)
+	fmt.Println("timeout requests on GET :", requestTimeout)
 	fmt.Println(time.Since(now))
 	fmt.Println("ending GET session")
 

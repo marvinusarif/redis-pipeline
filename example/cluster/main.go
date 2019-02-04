@@ -31,7 +31,7 @@ func main() {
 	rbc := redispipeline.NewRedisPipeline(client, maxCommandsBatch)
 
 	var requestTimeout uint64
-	requests := 5000
+	requests := 3000
 	redisJobPerRequest := 4
 	fmt.Println("starting SET session")
 	now := time.Now()

@@ -67,34 +67,38 @@ func (c *RedisClientImpl) RunBatch(name string) (reply []interface{}, err error)
 	if _, ok := c.batches[name]; !ok {
 		return nil, errors.New("batch name not found")
 	}
-	if err = c.batches[name].conn.Flush(); err != nil {
+	totalCmd := c.batches[name].totalCmd
+	conn := c.batches[name].conn
+	c.mu.RUnlock()
+
+	if err = conn.Flush(); err != nil {
 		return nil, err
 	}
 
-	for i := 0; i < c.batches[name].totalCmd; i++ {
+	for i := 0; i < totalCmd; i++ {
 		var resp interface{}
-		resp, err = c.batches[name].conn.Receive()
+		resp, err = conn.Receive()
 		if err != nil {
 			return nil, err
 		}
 		reply = append(reply, resp)
 	}
-	c.mu.RUnlock()
-	c.deleteBatch(name)
 
+	conn.Close()
+	c.deleteBatch(name)
 	return reply, err
 }
 
 func (c *RedisClientImpl) deleteBatch(name string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.batches[name].conn.Close()
 	delete(c.batches, name)
 }
 
 func (c *RedisClientImpl) Send(name string, cmd string, args ...interface{}) error {
 	c.mu.Lock()
-	defer c.mu.Unlock()
 	c.batches[name].totalCmd++
-	return c.batches[name].conn.Send(cmd, args...)
+	conn := c.batches[name].conn
+	c.mu.Unlock()
+	return conn.Send(cmd, args...)
 }
