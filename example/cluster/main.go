@@ -24,14 +24,14 @@ func main() {
 
 	// redisHost := "127.0.0.1:30001;127.0.0.1:30002;127.0.0.1:30003;127.0.0.1:30004;127.0.0.1:30005;127.0.0.1:30006"
 	redisHost := "127.0.0.1:30001;127.0.0.1:30002;127.0.0.1:30003"
-	maxConn := 5
+	maxConn := 200
 	maxCommandsBatch := uint64(100)
 
 	client := redis.New(redis.CLUSTER_MODE, redisHost, maxConn)
 	rbc := redispipeline.NewRedisPipeline(client, maxCommandsBatch)
 
 	var requestTimeout uint64
-	requests := 5000
+	requests := 3000
 	redisJobPerRequest := 4
 	fmt.Println("starting SET session")
 	now := time.Now()

@@ -53,15 +53,25 @@ func (c *RedisClusterClientImpl) NewBatch() string {
 
 func (c *RedisClusterClientImpl) RunBatch(name string) ([]interface{}, error) {
 	c.mu.RLock()
-	defer c.mu.RUnlock()
 	if _, ok := c.batches[name]; !ok {
 		return nil, errors.New("batch name not found")
 	}
-	return c.cluster.RunBatch(c.batches[name])
+	batch := c.batches[name]
+	c.mu.RUnlock()
+	reply, err := c.cluster.RunBatch(batch)
+
+	c.deleteBatch(name)
+	return reply, err
 }
 
 func (c *RedisClusterClientImpl) Send(name string, cmd string, args ...interface{}) error {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.batches[name].Put(cmd, args...)
+}
+
+func (c *RedisClusterClientImpl) deleteBatch(name string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	delete(c.batches, name)
 }
