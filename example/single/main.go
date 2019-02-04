@@ -13,6 +13,7 @@ import (
 
 	"github.com/google/gops/agent"
 	redispipeline "github.com/redis-pipeline"
+	redis "github.com/redis-pipeline/adapter"
 )
 
 func main() {
@@ -26,37 +27,48 @@ func main() {
 	if err := agent.Listen(agent.Options{}); err != nil {
 		log.Fatal(err)
 	}
-
 	log.SetFlags(log.Llongfile | log.Ldate | log.Ltime)
 
-	redisHost := "localhost:6380"
+	redisHost := "localhost:30008"
 	maxConn := 200
-	maxCommandsBatch := uint64(2000)
+	maxCommandsBatch := uint64(100)
 
-	rb := redispipeline.NewRedisPipeline(redisHost, maxConn, maxCommandsBatch)
+	client := redis.New(redis.SINGLE_MODE, redisHost, maxConn)
+	rb := redispipeline.NewRedisPipeline(client, maxCommandsBatch)
 	/*
 		simulates concurrent rps
 	*/
 	var requestTimeout uint64
-	requests := 22500
+	requests := 5000
 	redisJobPerRequest := 4
-	fmt.Println("starting multi/exec session")
+	fmt.Println("starting MULTI/EXEC session")
 	now := time.Now()
 	wg := &sync.WaitGroup{}
-	// wg.Add(requests * redisJobPerRequest)
-	// for i := 1; i <= requests; i++ {
-	// 	go func() {
-	// 		defer wg.Done()
-	// 		for i := 0; i <= redisJobPerRequest; i++ {
-	// 			multiExecRedis(rb, i, ctx)
-	// 		}
-	// 	}()
-	// }
-	// wg.Wait()
+	requestTimeout = uint64(0)
+	for x := 1; x <= requests; x++ {
+		wg.Add(1)
+		go func(x int) {
+			defer wg.Done()
+			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(1000)*time.Millisecond)
+			defer cancel()
+			var requestTimeoutError error
+			for y := 1; y <= redisJobPerRequest; y++ {
+				err := setKeyToRedis(rb, fmt.Sprintf("%d%d", x, y), ctx)
+				if err != nil {
+					log.Println(err)
+					requestTimeoutError = err
+				}
+			}
+			if requestTimeoutError != nil {
+				atomic.AddUint64(&requestTimeout, 1)
+			}
+		}(x)
+	}
+	wg.Wait()
 	fmt.Println(time.Since(now))
-	fmt.Println("ending multi/exec session")
+	fmt.Println("ending MULTI/EXEC session")
 
-	fmt.Println("starting set session")
+	fmt.Println("starting SET session")
 	now = time.Now()
 	wg = &sync.WaitGroup{}
 	requestTimeout = uint64(0)
@@ -70,6 +82,7 @@ func main() {
 			for y := 1; y <= redisJobPerRequest; y++ {
 				err := setKeyToRedis(rb, fmt.Sprintf("%d%d", x, y), ctx)
 				if err != nil {
+					log.Println(err)
 					requestTimeoutError = err
 				}
 			}
@@ -81,9 +94,9 @@ func main() {
 	wg.Wait()
 	fmt.Println("timeout requests :", requestTimeout)
 	fmt.Println(time.Since(now))
-	fmt.Println("ending set session")
+	fmt.Println("ending SET session")
 
-	fmt.Println("starting get session")
+	fmt.Println("starting GET session")
 	now = time.Now()
 	wg = &sync.WaitGroup{}
 	requestTimeout = uint64(0)
@@ -97,6 +110,7 @@ func main() {
 			for y := 1; y <= redisJobPerRequest; y++ {
 				err := getKeyFromRedis(rb, fmt.Sprintf("%d%d", x, y), ctx)
 				if err != nil {
+					log.Println(err)
 					requestTimeoutError = err
 				}
 			}
@@ -108,7 +122,7 @@ func main() {
 	wg.Wait()
 	fmt.Println("timeout requests :", requestTimeout)
 	fmt.Println(time.Since(now))
-	fmt.Println("ending get session")
+	fmt.Println("ending GET session")
 
 	// create term so the app didn't exit
 	term := make(chan os.Signal, 1)
@@ -164,7 +178,7 @@ func multiExecRedis(rb redispipeline.RedisPipeline, i string, ctx context.Contex
 }
 
 func getKeyFromRedis(rb redispipeline.RedisPipeline, i string, ctx context.Context) error {
-	_, err := rb.NewSession(ctx).
+	resps, err := rb.NewSession(ctx).
 		PushCommand("GET", fmt.Sprintf("testA%s", i)).
 		PushCommand("GET", fmt.Sprintf("testB%s", i)).
 		PushCommand("GET", fmt.Sprintf("testC%s", i)).
@@ -174,30 +188,34 @@ func getKeyFromRedis(rb redispipeline.RedisPipeline, i string, ctx context.Conte
 	if err != nil {
 		return err
 	}
-	return nil
 	/*
 	 Need to cast the response and error accordingly in sequential order
 	*/
-	// for _, resp := range resps {
-	// 	if resp.Err != nil {
-	// 		fmt.Println(resp.Err)
-	// 		continue
-	// 	}
-	// 	switch reply := resp.Value.(type) {
-	// 	case string:
-	// 		fmt.Println("get", reply)
-	// 	case int64:
-	// 		fmt.Println("get", reply)
-	// 	case float64:
-	// 		fmt.Println("get", reply)
-	// 	case []byte:
-	// 		fmt.Println("get", string(reply))
-	// 	}
-	// }
+	for _, resp := range resps {
+		if resp.Err != nil {
+			fmt.Println(resp.Err)
+			continue
+		}
+		switch reply := resp.Value.(type) {
+		case string:
+			fmt.Println("cast to string")
+			fmt.Println("expect", i, "get", reply)
+		case int64:
+			fmt.Println("cast to int")
+			fmt.Println("expect", i, "get", reply)
+		case float64:
+			fmt.Println("cast to float")
+			fmt.Println("expect", i, "get", reply)
+		case []byte:
+			fmt.Println("cast to byte")
+			fmt.Println("expect", i, "get", string(reply))
+		}
+	}
+	return nil
 }
 
 func setKeyToRedis(rb redispipeline.RedisPipeline, i string, ctx context.Context) error {
-	_, err := rb.NewSession(ctx).
+	resps, err := rb.NewSession(ctx).
 		PushCommand("SET", fmt.Sprintf("testA%s", i), i).
 		PushCommand("SET", fmt.Sprintf("testB%s", i), i).
 		PushCommand("SET", fmt.Sprintf("testC%s", i), i).
@@ -207,24 +225,28 @@ func setKeyToRedis(rb redispipeline.RedisPipeline, i string, ctx context.Context
 	if err != nil {
 		return err
 	}
-	return nil
 	/*
 	 Need to cast the response and error accordingly in sequential order
 	*/
-	// for _, resp := range resps {
-	// 	if resp.Err != nil {
-	// 		fmt.Println(resp.Err)
-	// 		continue
-	// 	}
-	// 	switch reply := resp.Value.(type) {
-	// 	case string:
-	// 		fmt.Println("set", reply)
-	// 	case int64:
-	// 		fmt.Println("set", reply)
-	// 	case float64:
-	// 		fmt.Println("set", reply)
-	// 	case []byte:
-	// 		fmt.Println("set", string(reply))
-	// 	}
-	// }
+	for _, resp := range resps {
+		if resp.Err != nil {
+			fmt.Println(resp.Err)
+			continue
+		}
+		switch reply := resp.Value.(type) {
+		case string:
+			fmt.Println("cast to string")
+			fmt.Println("expect", i, "get", reply)
+		case int64:
+			fmt.Println("cast to int")
+			fmt.Println("expect", i, "get", reply)
+		case float64:
+			fmt.Println("cast to float")
+			fmt.Println("expect", i, "get", reply)
+		case []byte:
+			fmt.Println("cast to byte")
+			fmt.Println("expect", i, "get", string(reply))
+		}
+	}
+	return nil
 }
