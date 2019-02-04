@@ -24,7 +24,7 @@ func main() {
 
 	// redisHost := "127.0.0.1:30001;127.0.0.1:30002;127.0.0.1:30003;127.0.0.1:30004;127.0.0.1:30005;127.0.0.1:30006"
 	redisHost := "127.0.0.1:30001;127.0.0.1:30002;127.0.0.1:30003"
-	maxConn := 200
+	maxConn := 5
 	maxCommandsBatch := uint64(100)
 
 	client := redis.New(redis.CLUSTER_MODE, redisHost, maxConn)

@@ -113,9 +113,8 @@ func (rb *RedisPipelineImpl) newFlusher(flushChan chan []*Session) {
 func (rb *RedisPipelineImpl) flush(sessions []*Session) {
 	sentSessions := make([]*Session, 0)
 	batchName := rb.client.NewBatch()
-
 	for _, session := range sessions {
-		if session.status.startProcessIfAllowed() == true {
+		if session.status.startProcessIfAllowed() {
 			var sessErr error
 			var cmdresponses []*CommandResponse
 			for _, cmd := range session.commands {
