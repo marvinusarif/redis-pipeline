@@ -13,7 +13,7 @@ import (
 
 	"github.com/google/gops/agent"
 	redispipeline "github.com/redis-pipeline"
-	redis "github.com/redis-pipeline/adapter"
+	redis "github.com/redis-pipeline/client"
 )
 
 func main() {
