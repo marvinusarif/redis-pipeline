@@ -1,0 +1,31 @@
+89551:C 04 Feb 2019 10:54:55.810 # oO0OoO0OoO0Oo Redis is starting oO0OoO0OoO0Oo
+89551:C 04 Feb 2019 10:54:55.810 # Redis version=5.0.1, bits=64, commit=00000000, modified=0, pid=89551, just started
+89551:C 04 Feb 2019 10:54:55.810 # Configuration loaded
+89552:M 04 Feb 2019 10:54:55.812 * Increased maximum number of open files to 10032 (it was originally set to 256).
+89552:M 04 Feb 2019 10:54:55.813 * No cluster configuration found, I'm 9f3533ac57715f45baeeb5cce8ed281e7b58ef36
+89552:M 04 Feb 2019 10:54:55.814 * Running mode=cluster, port=30004.
+89552:M 04 Feb 2019 10:54:55.814 # Server initialized
+89552:M 04 Feb 2019 10:54:55.815 * Ready to accept connections
+89552:M 04 Feb 2019 10:55:00.506 # configEpoch set to 4 via CLUSTER SET-CONFIG-EPOCH
+89552:M 04 Feb 2019 10:55:00.649 # IP address for this node updated to 127.0.0.1
+89552:M 04 Feb 2019 10:55:02.588 # Cluster state changed: ok
+89552:S 04 Feb 2019 10:55:03.535 * Before turning into a replica, using my master parameters to synthesize a cached master: I may be able to synchronize with the new master with just a partial transfer.
+89552:S 04 Feb 2019 10:55:03.900 * Connecting to MASTER 127.0.0.1:30001
+89552:S 04 Feb 2019 10:55:03.900 * MASTER <-> REPLICA sync started
+89552:S 04 Feb 2019 10:55:03.902 * Non blocking connect for SYNC fired the event.
+89552:S 04 Feb 2019 10:55:03.902 * Master replied to PING, replication can continue...
+89552:S 04 Feb 2019 10:55:03.902 * Trying a partial resynchronization (request ae821211dbe2cd3229b1bf6c21d00795d2215f93:1).
+89552:S 04 Feb 2019 10:55:03.904 * Full resync from master: 295351199ae65f732228f5b6a36c79fc5a445646:0
+89552:S 04 Feb 2019 10:55:03.904 * Discarding previously cached master state.
+89552:S 04 Feb 2019 10:55:03.984 * MASTER <-> REPLICA sync: receiving 175 bytes from master
+89552:S 04 Feb 2019 10:55:03.985 * MASTER <-> REPLICA sync: Flushing old data
+89552:S 04 Feb 2019 10:55:03.986 * MASTER <-> REPLICA sync: Loading DB in memory
+89552:S 04 Feb 2019 10:55:03.987 * MASTER <-> REPLICA sync: Finished with success
+89552:S 04 Feb 2019 10:55:03.988 * Background append only file rewriting started by pid 89588
+89552:S 04 Feb 2019 10:55:04.014 * AOF rewrite child asks to stop sending diffs.
+89588:C 04 Feb 2019 10:55:04.014 * Parent agreed to stop sending diffs. Finalizing AOF...
+89588:C 04 Feb 2019 10:55:04.014 * Concatenating 0.00 MB of AOF diff received from parent.
+89588:C 04 Feb 2019 10:55:04.015 * SYNC append only file rewrite performed
+89552:S 04 Feb 2019 10:55:04.104 * Background AOF rewrite terminated with success
+89552:S 04 Feb 2019 10:55:04.105 * Residual parent diff successfully flushed to the rewritten AOF (0.00 MB)
+89552:S 04 Feb 2019 10:55:04.105 * Background AOF rewrite finished successfully

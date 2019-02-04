@@ -260,17 +260,20 @@ func (ps *RedisPipelineSessionImpl) waitResponse() ([]*CommandResponse, error) {
 		responses []*CommandResponse
 		err       error
 	)
-	select {
-	case <-ps.ctx.Done():
-		if ps.session.status.stopProcessIfAllowed() == true {
-			err = ps.ctx.Err()
-		}
+	for {
+		select {
+		case <-ps.ctx.Done():
+			if ps.session.status.stopProcessIfAllowed() == true {
+				err = ps.ctx.Err()
+				return nil, err
+			}
 
-	case sessionResponse := <-ps.session.responseChan:
-		responses = sessionResponse.CommandsResponses
-		err = sessionResponse.Err
+		case sessionResponse := <-ps.session.responseChan:
+			responses = sessionResponse.CommandsResponses
+			err = sessionResponse.Err
+			return responses, err
+		}
 	}
-	return responses, err
 }
 
 func (s *Status) startProcessIfAllowed() bool {

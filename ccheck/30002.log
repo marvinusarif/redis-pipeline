@@ -1,0 +1,18 @@
+89547:C 04 Feb 2019 10:54:55.797 # oO0OoO0OoO0Oo Redis is starting oO0OoO0OoO0Oo
+89547:C 04 Feb 2019 10:54:55.797 # Redis version=5.0.1, bits=64, commit=00000000, modified=0, pid=89547, just started
+89547:C 04 Feb 2019 10:54:55.797 # Configuration loaded
+89548:M 04 Feb 2019 10:54:55.799 * Increased maximum number of open files to 10032 (it was originally set to 256).
+89548:M 04 Feb 2019 10:54:55.800 * No cluster configuration found, I'm 17e01df9ca58326f833349cdb7afeab39a313b5f
+89548:M 04 Feb 2019 10:54:55.801 * Running mode=cluster, port=30002.
+89548:M 04 Feb 2019 10:54:55.801 # Server initialized
+89548:M 04 Feb 2019 10:54:55.802 * Ready to accept connections
+89548:M 04 Feb 2019 10:55:00.505 # configEpoch set to 2 via CLUSTER SET-CONFIG-EPOCH
+89548:M 04 Feb 2019 10:55:00.650 # IP address for this node updated to 127.0.0.1
+89548:M 04 Feb 2019 10:55:02.480 # Cluster state changed: ok
+89548:M 04 Feb 2019 10:55:03.919 * Replica 127.0.0.1:30005 asks for synchronization
+89548:M 04 Feb 2019 10:55:03.919 * Partial resynchronization not accepted: Replication ID mismatch (Replica asked for 'da8905c2f41939eb44e9193242050807ffa588ce', my replication IDs are 'cfc9135228f08eb2d4b386138155960a8a46e075' and '0000000000000000000000000000000000000000')
+89548:M 04 Feb 2019 10:55:03.919 * Starting BGSAVE for SYNC with target: disk
+89548:M 04 Feb 2019 10:55:03.920 * Background saving started by pid 89586
+89586:C 04 Feb 2019 10:55:03.921 * DB saved on disk
+89548:M 04 Feb 2019 10:55:03.997 * Background saving terminated with success
+89548:M 04 Feb 2019 10:55:03.997 * Synchronization with replica 127.0.0.1:30005 succeeded
