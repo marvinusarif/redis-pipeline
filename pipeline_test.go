@@ -105,7 +105,7 @@ var _ = Describe("Pipeline Session", func() {
 			Expect(resp).Should(Equal(expResp))
 			Expect(err).Should(BeNil())
 		})
-
+		//
 		It("should force to cancel", func() {
 			maxCommandsPerBatch = 1
 			client.On("NewBatch").
@@ -127,6 +127,50 @@ var _ = Describe("Pipeline Session", func() {
 				Execute()
 			Expect(resp).Should(BeNil())
 			Expect(err).ShouldNot(BeNil())
+		})
+
+		It("should force to proceed session", func() {
+			maxCommandsPerBatch = 1
+			client.On("NewBatch").
+				Return("new-batch-mock")
+			client.On("Send",
+				mock.AnythingOfType("string"),
+				mock.AnythingOfType("string"),
+				mock.AnythingOfType("string"),
+				mock.AnythingOfType("string")).Return(nil)
+			client.On("RunBatch", mock.AnythingOfType("string")).Return([]interface{}{
+				"OK", "OK", "OK", "OK", "OK", "OK", "OK", "OK", "OK", "OK", "OK", "OK", "OK", "OK", "OK", "OK", "OK", "OK", "OK", "OK",
+				"OK", "OK", "OK", "OK", "OK", "OK", "OK", "OK", "OK", "OK", "OK", "OK", "OK", "OK", "OK", "OK", "OK", "OK", "OK", "OK",
+				"OK", "OK", "OK", "OK", "OK", "OK", "OK", "OK", "OK", "OK", "OK", "OK", "OK", "OK", "OK", "OK", "OK", "OK", "OK", "OK",
+			}, nil)
+			pl := NewRedisPipeline(client, maxCommandsPerBatch)
+			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(1)*time.Millisecond)
+			defer cancel()
+			resp, err := pl.NewSession(ctx).
+				PushCommand("SET", "myKey", "1").
+				PushCommand("SET", "myKey", "1").
+				PushCommand("SET", "myKey", "1").
+				PushCommand("SET", "myKey", "1").
+				PushCommand("SET", "myKey", "1").
+				PushCommand("SET", "myKey", "1").
+				PushCommand("SET", "myKey", "1").
+				PushCommand("SET", "myKey", "1").
+				PushCommand("SET", "myKey", "1").
+				PushCommand("SET", "myKey", "1").
+				PushCommand("SET", "myKey", "1").
+				PushCommand("SET", "myKey", "1").
+				PushCommand("SET", "myKey", "1").
+				PushCommand("SET", "myKey", "1").
+				PushCommand("SET", "myKey", "1").
+				PushCommand("SET", "myKey", "1").
+				PushCommand("SET", "myKey", "1").
+				PushCommand("SET", "myKey", "1").
+				PushCommand("SET", "myKey", "1").
+				PushCommand("SET", "myKey", "1").
+				PushCommand("SET", "myKey", "1").
+				Execute()
+			Expect(resp).ShouldNot(BeNil())
+			Expect(err).Should(BeNil())
 		})
 
 		It("should error on redis send", func() {

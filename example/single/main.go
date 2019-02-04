@@ -30,7 +30,7 @@ func main() {
 	log.SetFlags(log.Llongfile | log.Ldate | log.Ltime)
 
 	redisHost := "localhost:30008"
-	maxConn := 200
+	maxConn := 2000
 	maxCommandsBatch := uint64(100)
 
 	client := redis.New(redis.SINGLE_MODE, redisHost, maxConn)
