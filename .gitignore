@@ -1,4 +1,5 @@
 vendor
+ccheck
 ccheck/*.log
 ccheck/*.aof
 ccheck/*.conf
