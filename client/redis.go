@@ -13,6 +13,7 @@ const (
 	SINGLE_MODE
 )
 
+// RedisClient ...
 type RedisClient interface {
 	GetMaxConn() int
 	NewBatch() string
