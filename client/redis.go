@@ -7,7 +7,9 @@ import (
 )
 
 const (
+	//CLUSTER_MODE 0
 	CLUSTER_MODE int = iota
+	// SINGLE_MODE 1
 	SINGLE_MODE
 )
 
@@ -18,6 +20,7 @@ type RedisClient interface {
 	Send(string, string, ...interface{}) error
 }
 
+// New return new RedisClient
 func New(mode int, host string, maxConn int) RedisClient {
 	switch mode {
 	case CLUSTER_MODE:

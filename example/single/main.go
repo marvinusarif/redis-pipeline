@@ -53,7 +53,7 @@ func main() {
 			defer cancel()
 			var requestTimeoutError error
 			for y := 1; y <= redisJobPerRequest; y++ {
-				err := setKeyToRedis(rb, fmt.Sprintf("%d%d", x, y), ctx)
+				err := setKeyToRedis(ctx, rb, fmt.Sprintf("%d%d", x, y))
 				if err != nil {
 					log.Println(err)
 					requestTimeoutError = err
@@ -81,7 +81,7 @@ func main() {
 			defer cancel()
 			var requestTimeoutError error
 			for y := 1; y <= redisJobPerRequest; y++ {
-				err := setKeyToRedis(rb, fmt.Sprintf("%d%d", x, y), ctx)
+				err := setKeyToRedis(ctx, rb, fmt.Sprintf("%d%d", x, y))
 				if err != nil {
 					log.Println(err)
 					requestTimeoutError = err
@@ -109,7 +109,7 @@ func main() {
 			defer cancel()
 			var requestTimeoutError error
 			for y := 1; y <= redisJobPerRequest; y++ {
-				err := getKeyFromRedis(rb, fmt.Sprintf("%d%d", x, y), ctx)
+				err := getKeyFromRedis(ctx, rb, fmt.Sprintf("%d%d", x, y))
 				if err != nil {
 					log.Println(err)
 					requestTimeoutError = err
@@ -134,7 +134,7 @@ func main() {
 	}
 }
 
-func multiExecRedis(rb redispipeline.RedisPipeline, i string, ctx context.Context) error {
+func multiExecRedis(ctx context.Context, rb redispipeline.RedisPipeline, i string) error {
 	_, err := rb.NewSession(ctx).
 		PushCommand("MULTI").             //response : {OK, <nil>}
 		PushCommand("SET", "testA%s", i). //response : {QUEUED, <nil>}
@@ -178,7 +178,7 @@ func multiExecRedis(rb redispipeline.RedisPipeline, i string, ctx context.Contex
 	// }`
 }
 
-func getKeyFromRedis(rb redispipeline.RedisPipeline, i string, ctx context.Context) error {
+func getKeyFromRedis(ctx context.Context, rb redispipeline.RedisPipeline, i string) error {
 	resps, err := rb.NewSession(ctx).
 		PushCommand("GET", fmt.Sprintf("testA%s", i)).
 		PushCommand("GET", fmt.Sprintf("testB%s", i)).
@@ -215,7 +215,7 @@ func getKeyFromRedis(rb redispipeline.RedisPipeline, i string, ctx context.Conte
 	return nil
 }
 
-func setKeyToRedis(rb redispipeline.RedisPipeline, i string, ctx context.Context) error {
+func setKeyToRedis(ctx context.Context, rb redispipeline.RedisPipeline, i string) error {
 	resps, err := rb.NewSession(ctx).
 		PushCommand("SET", fmt.Sprintf("testA%s", i), i).
 		PushCommand("SET", fmt.Sprintf("testB%s", i), i).

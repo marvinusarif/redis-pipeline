@@ -5,44 +5,52 @@ import (
 	"sync"
 )
 
+// RedisPipelineSession ...
 type RedisPipelineSession interface {
 	PushCommand(command string, args ...interface{}) RedisPipelineSession
 	Execute() ([]*CommandResponse, error)
 }
 
+// RedisPipelineSessionImpl ...
 type RedisPipelineSessionImpl struct {
 	pipelineHub *RedisPipelineImpl
 	ctx         context.Context
 	session     *Session
 }
 
+// Command ...
 type Command struct {
 	commandName string
 	args        []interface{}
 }
 
+// CommandResponse ...
 type CommandResponse struct {
 	Value interface{}
 	Err   error
 }
 
+// SessionResponse ...
 type SessionResponse struct {
 	CommandsResponses []*CommandResponse
 	Err               error
 }
 
+// Status ...
 type Status struct {
 	mu            *sync.Mutex
 	shouldProcess bool
 	cancellable   bool
 }
 
+// Session ...
 type Session struct {
 	status       *Status
 	responseChan chan *SessionResponse
 	commands     []*Command
 }
 
+// PushCommand push command to session
 func (ps *RedisPipelineSessionImpl) PushCommand(command string, args ...interface{}) RedisPipelineSession {
 	cmd := &Command{
 		commandName: command,
@@ -52,6 +60,7 @@ func (ps *RedisPipelineSessionImpl) PushCommand(command string, args ...interfac
 	return ps
 }
 
+// Execute all commands within session
 func (ps *RedisPipelineSessionImpl) Execute() ([]*CommandResponse, error) {
 	go ps.pipelineHub.sendToPipelineHub(ps.session)
 	return ps.waitResponse()
