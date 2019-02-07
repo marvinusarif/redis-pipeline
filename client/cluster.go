@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 )
 
+// RedisClusterClientImpl implementation of redis client for cluster mode
 type RedisClusterClientImpl struct {
 	mu      *sync.RWMutex
 	mode    int
@@ -37,10 +38,12 @@ func createCluster(host string, maxConn int) *rc.Cluster {
 	return cluster
 }
 
+// GetMaxConn Return Redis Cluster Max Connection Pool for each node
 func (c *RedisClusterClientImpl) GetMaxConn() int {
 	return c.maxConn
 }
 
+// NewBatch Init New Batch of Commands
 func (c *RedisClusterClientImpl) NewBatch() string {
 	name := uuid.New().String()
 	c.mu.Lock()
@@ -51,6 +54,7 @@ func (c *RedisClusterClientImpl) NewBatch() string {
 	return name
 }
 
+// RunBatch Run Commands in Single Batch
 func (c *RedisClusterClientImpl) RunBatch(name string) ([]interface{}, error) {
 	c.mu.RLock()
 	if _, ok := c.batches[name]; !ok {
@@ -64,6 +68,7 @@ func (c *RedisClusterClientImpl) RunBatch(name string) ([]interface{}, error) {
 	return reply, err
 }
 
+// Send send command to batch
 func (c *RedisClusterClientImpl) Send(name string, cmd string, args ...interface{}) error {
 	c.mu.RLock()
 	defer c.mu.RUnlock()

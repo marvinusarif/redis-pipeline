@@ -141,36 +141,18 @@ var _ = Describe("[Unit Test] Pipeline Session", func() {
 				mock.AnythingOfType("string"),
 				mock.AnythingOfType("string")).Return(nil)
 			client.On("RunBatch", mock.AnythingOfType("string")).Return([]interface{}{
-				"OK", "OK", "OK", "OK", "OK", "OK", "OK", "OK", "OK", "OK", "OK", "OK", "OK", "OK", "OK", "OK", "OK", "OK", "OK", "OK",
-				"OK", "OK", "OK", "OK", "OK", "OK", "OK", "OK", "OK", "OK", "OK", "OK", "OK", "OK", "OK", "OK", "OK", "OK", "OK", "OK",
-				"OK", "OK", "OK", "OK", "OK", "OK", "OK", "OK", "OK", "OK", "OK", "OK", "OK", "OK", "OK", "OK", "OK", "OK", "OK", "OK",
+				"OK", "OK", "OK", "OK", "OK", "OK", "OK", "OK", "OK", "OK",
+				"OK", "OK", "OK", "OK", "OK", "OK", "OK", "OK", "OK", "OK",
+				"OK", "OK", "OK", "OK", "OK",
 			}, nil)
 			pl := NewRedisPipeline(client, maxCommandsPerBatch)
 			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(1)*time.Millisecond)
 			defer cancel()
-			resp, err := pl.NewSession(ctx).
-				PushCommand("SET", "myKey", "1").
-				PushCommand("SET", "myKey", "1").
-				PushCommand("SET", "myKey", "1").
-				PushCommand("SET", "myKey", "1").
-				PushCommand("SET", "myKey", "1").
-				PushCommand("SET", "myKey", "1").
-				PushCommand("SET", "myKey", "1").
-				PushCommand("SET", "myKey", "1").
-				PushCommand("SET", "myKey", "1").
-				PushCommand("SET", "myKey", "1").
-				PushCommand("SET", "myKey", "1").
-				PushCommand("SET", "myKey", "1").
-				PushCommand("SET", "myKey", "1").
-				PushCommand("SET", "myKey", "1").
-				PushCommand("SET", "myKey", "1").
-				PushCommand("SET", "myKey", "1").
-				PushCommand("SET", "myKey", "1").
-				PushCommand("SET", "myKey", "1").
-				PushCommand("SET", "myKey", "1").
-				PushCommand("SET", "myKey", "1").
-				PushCommand("SET", "myKey", "1").
-				Execute()
+			sess := pl.NewSession(ctx)
+			for i := 0; i < 25; i++ {
+				sess = sess.PushCommand("SET", "myKey", "1")
+			}
+			resp, err := sess.Execute()
 			Expect(resp).ShouldNot(BeNil())
 			Expect(err).Should(BeNil())
 		})

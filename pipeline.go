@@ -9,21 +9,24 @@ import (
 )
 
 const (
-	DEFAULT_MAX_COMMAND_PER_BATCH uint64 = 100
+	defaultMaxCommandPerBatch uint64 = 100
 )
 
+// RedisPipeline interface
 type RedisPipeline interface {
 	NewSession(ctx context.Context) RedisPipelineSession
 	createListener()
 }
 
+// NewRedisPipeline initiate RedisPipeline interface
 func NewRedisPipeline(client redis.RedisClient, maxCommandsPerBatch uint64) RedisPipeline {
 	if maxCommandsPerBatch < 1 {
-		maxCommandsPerBatch = DEFAULT_MAX_COMMAND_PER_BATCH
+		maxCommandsPerBatch = defaultMaxCommandPerBatch
 	}
 	return initRedisPipeline(client, maxCommandsPerBatch)
 }
 
+// RedisPipelineImpl Implementation of RedisPipeline interface
 type RedisPipelineImpl struct {
 	interval            time.Duration
 	client              redis.RedisClient
@@ -79,6 +82,7 @@ func (rb *RedisPipelineImpl) createListener() {
 	}
 }
 
+// NewSession Of RedisPipeline
 func (rb *RedisPipelineImpl) NewSession(ctx context.Context) RedisPipelineSession {
 	if ctx == nil {
 		ctx = context.Background()
