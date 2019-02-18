@@ -11,11 +11,6 @@ type RedisPipeline struct {
 	mock.Mock
 }
 
-// createListener provides a mock function with given fields:
-func (_m *RedisPipeline) createListener() {
-	_m.Called()
-}
-
 // NewSession provides a mock function with given fields: ctx
 func (_m *RedisPipeline) NewSession(ctx context.Context) redispipeline.RedisPipelineSession {
 	ret := _m.Called(ctx)
