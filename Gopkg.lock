@@ -2,13 +2,12 @@
 
 
 [[projects]]
-  branch = "master"
-  digest = "1:ba1b501bf70b610c6f580976a7f35cf23b0a8aad1538eb3955a8f26172c5c050"
-  name = "github.com/chasex/redis-go-cluster"
-  packages = ["."]
+  digest = "1:ffe9824d294da03b391f44e1ae8281281b4afc1bdaa9588c9097785e3af10cec"
+  name = "github.com/davecgh/go-spew"
+  packages = ["spew"]
   pruneopts = "UT"
-  revision = "222d81891f1d3fa7cf8b5655020352c3e5b4ec0f"
-  source = "github.com/chasex/redis-go-cluster.git"
+  revision = "8991bc29aa16c548c550c7ff78260e27b9ab7c73"
+  version = "v1.1.1"
 
 [[projects]]
   digest = "1:38ec74012390146c45af1f92d46e5382b50531247929ff3a685d2b2be65155ac"
@@ -32,14 +31,6 @@
   pruneopts = "UT"
   revision = "9fda3b87c7b32caeeb2974e7cc2e71e60a597fdf"
   version = "v0.3.6"
-
-[[projects]]
-  digest = "1:236d7e1bdb50d8f68559af37dbcf9d142d56b431c9b2176d41e2a009b664cda8"
-  name = "github.com/google/uuid"
-  packages = ["."]
-  pruneopts = "UT"
-  revision = "9b3b1e0f5f99ae461456d768e7d301a7acdaa2d8"
-  version = "v1.1.0"
 
 [[projects]]
   branch = "master"
@@ -120,8 +111,35 @@
   version = "v1.4.3"
 
 [[projects]]
+  digest = "1:0028cb19b2e4c3112225cd871870f2d9cf49b9b4276531f03438a88e94be86fe"
+  name = "github.com/pmezard/go-difflib"
+  packages = ["difflib"]
+  pruneopts = "UT"
+  revision = "792786c7400a136282c1664665ae0a8db921c6c2"
+  version = "v1.0.0"
+
+[[projects]]
+  digest = "1:ac83cf90d08b63ad5f7e020ef480d319ae890c208f8524622a2f3136e2686b02"
+  name = "github.com/stretchr/objx"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "477a77ecc69700c7cdeb1fa9e129548e1c1c393c"
+  version = "v0.1.1"
+
+[[projects]]
+  digest = "1:0bcc464dabcfad5393daf87c3f8142911d0f6c52569b837e91a1c15e890265f3"
+  name = "github.com/stretchr/testify"
+  packages = [
+    "assert",
+    "mock",
+  ]
+  pruneopts = "UT"
+  revision = "ffdc059bfe9ce6a4e144ba849dbedead332c6053"
+  version = "v1.3.0"
+
+[[projects]]
   branch = "master"
-  digest = "1:4939e20b972c22cd512abff0bf6ed8fc0e3e86aeb836d016be3323c6a901d99d"
+  digest = "1:03a8ff54c1a62710fe21a08ad9ccd554ac90232c4fd34c2731f65dd47e1f2077"
   name = "golang.org/x/net"
   packages = [
     "html",
@@ -129,15 +147,15 @@
     "html/charset",
   ]
   pruneopts = "UT"
-  revision = "d26f9f9a57f3fab6a695bec0d84433c2c50f8bbf"
+  revision = "3a22650c66bd7f4fb6d1e8072ffd7b75c8a27898"
 
 [[projects]]
   branch = "master"
-  digest = "1:e148a4a19f62c442c03fbab1c8810780d739bcc3e9e6b818971035e1c4946582"
+  digest = "1:8207c052fb873f83c61a5aa16f6add5feb9881eda2112b56f69fd3b9e7f55c3f"
   name = "golang.org/x/sys"
   packages = ["unix"]
   pruneopts = "UT"
-  revision = "7ae0202eb74c2b534255c71b5a15fa4115aabbcc"
+  revision = "d0b11bdaac8adb652bff00e49bcacf992835621a"
 
 [[projects]]
   digest = "1:aa4d6967a3237f8367b6bf91503964a77183ecf696f1273e8ad3551bb4412b5f"
@@ -192,13 +210,12 @@
   analyzer-name = "dep"
   analyzer-version = 1
   input-imports = [
-    "github.com/chasex/redis-go-cluster",
     "github.com/gomodule/redigo/redis",
     "github.com/google/gops/agent",
-    "github.com/google/uuid",
     "github.com/mna/redisc",
     "github.com/onsi/ginkgo",
     "github.com/onsi/gomega",
+    "github.com/stretchr/testify/mock",
   ]
   solver-name = "gps-cdcl"
   solver-version = 1
