@@ -209,6 +209,37 @@ var _ = Describe("[Unit Test] Pipeline Session", func() {
 			Expect(err).Should(Equal(expError))
 		})
 
+		It("should error on redis readOnly - check on readonly", func() {
+			client = &mocks.RedisClient{}
+			conn = &mocks.Conn{}
+			expError := errors.New("connection is intended only for read-only commands")
+			expResp := []*CommandResponse{nil, nil}
+			client.On("GetMaxConn").Return(100)
+			client.On("GetHosts").Return(masterHost, slaveHost)
+			client.On("GetNodeIPByKey",
+				mock.AnythingOfType("string"),
+				mock.AnythingOfType("bool")).
+				Return(masterHost[0], nil)
+			client.On("GetConn", mock.AnythingOfType("string")).
+				Return(conn, true, nil)
+			conn.On("Close").Return(nil)
+			conn.On("Send",
+				mock.AnythingOfType("string"),
+				mock.AnythingOfType("string"),
+				mock.AnythingOfType("string")).
+				Return(expError)
+			conn.On("Flush").Return(nil)
+			conn.On("Receive").Return("OK", nil)
+
+			pl := NewRedisPipeline(client, maxIntervalMs, maxCommandsPerBatch)
+			resp, err := pl.NewSession(nil).
+				PushCommand("SET", "myKey", "1").
+				PushCommand("SET", "myKey", "2").
+				Execute()
+			Expect(resp).Should(Equal(expResp))
+			Expect(err).Should(Equal(expError))
+		})
+
 		It("should error on redis readOnly", func() {
 			client = &mocks.RedisClient{}
 			conn = &mocks.Conn{}

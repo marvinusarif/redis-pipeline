@@ -160,9 +160,6 @@ func (c *Cluster) GetConnByAddr(addr string) (conn redis.Conn, isReadOnly bool, 
 	pool := c.getOrCreatePool(addr)
 	conn = pool.Get()
 	err = conn.Err()
-	if err == nil && isReadOnly {
-		_, err = conn.Do("READONLY")
-	}
 	if err != nil {
 		c.updateClusterRegistry(nil)
 	}
