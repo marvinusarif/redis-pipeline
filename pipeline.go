@@ -168,16 +168,6 @@ func (rb *RedisPipelineImpl) flush(host string, sessions []*Session) {
 		}
 		return
 	}
-	if isConnReadOnly {
-		err = conn.Send("READONLY")
-		if err != nil {
-			//update cluster registry has been handled in cluster library
-			for _, session := range sessions {
-				go session.reply(nil, err)
-			}
-			return
-		}
-	}
 	defer conn.Close()
 	for _, session := range sessions {
 		//the session should match with the connection
