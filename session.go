@@ -2,6 +2,7 @@ package redispipeline
 
 import (
 	"context"
+	"errors"
 	"sync"
 )
 
@@ -95,12 +96,18 @@ func (ps *RedisPipelineSessionImpl) pushCommand(readOnly bool, command string, a
 // Execute all commands within session
 func (ps *RedisPipelineSessionImpl) Execute() ([]*CommandResponse, error) {
 	ps.sessionResponseChan = make(chan *SessionResponse, len(ps.session))
+
+	if len(ps.session) < 1 {
+		return nil, errors.New("redis pipeline session is empty")
+	}
+
 	for nodeIP, sess := range ps.session {
 		//set up response channel to same with other session
 		sess.responseChan = ps.sessionResponseChan
 		//session should be distributed to responsible node
 		go ps.pipelineHub.sendToPipelineHub(nodeIP, sess)
 	}
+
 	return ps.waitResponse()
 }
 

@@ -141,7 +141,9 @@ func (c *Cluster) GetNodeIPBySlot(slot int, readOnly bool) (nodeIP string, err e
 		nodeIP = nodes[0]
 	} else {
 		//if readonly return random slave
-		if numNodes == 2 {
+		if numNodes == 1 {
+			nodeIP = nodes[0]
+		} else if numNodes == 2 {
 			nodeIP = nodes[1]
 		} else {
 			idx := int(time.Now().UnixNano()) % numNodes
@@ -271,6 +273,7 @@ func (c *Cluster) isNodeReadOnly(nodeIP string) (isReadOnly bool) {
 	for masterIP := range c.slaveByMasterIPs {
 		if nodeIP == masterIP {
 			isReadOnly = false
+			break
 		}
 	}
 	c.mu.RUnlock()

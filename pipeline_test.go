@@ -105,6 +105,14 @@ var _ = Describe("[Unit Test] Pipeline Session", func() {
 	})
 
 	Context("Redis", func() {
+		It("should return error session is empty", func() {
+			pl := NewRedisPipeline(client, maxIntervalMs, maxCommandsPerBatch)
+			resp, err := pl.NewSession(nil).
+				Execute()
+			Expect(resp).Should(BeNil())
+			Expect(err).ShouldNot(BeNil())
+		})
+
 		It("should execute session", func() {
 			pl := NewRedisPipeline(client, maxIntervalMs, maxCommandsPerBatch)
 			resp, err := pl.NewSession(nil).
@@ -365,7 +373,7 @@ var _ = Describe("Integration Test Pipeline", func() {
 				pl = NewRedisPipeline(singleClient, maxIntervalMs, maxCommandsPerBatch)
 			})
 
-			It("populate data to redis cluster", func() {
+			It("populate data to redis single", func() {
 				expected = []struct {
 					Command string
 					Args    []interface{}
@@ -414,7 +422,7 @@ var _ = Describe("Integration Test Pipeline", func() {
 				}
 				sess := pl.NewSession(nil)
 				for _, exp := range expected {
-					sess = sess.PushCommand(exp.Command, exp.Args[0])
+					sess = sess.PushCommandReadOnly(exp.Command, exp.Args[0])
 				}
 				resps, err := sess.Execute()
 				Expect(resps).ShouldNot(BeNil())
