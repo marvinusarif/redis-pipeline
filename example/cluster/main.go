@@ -39,7 +39,7 @@ func main() {
 	client := rediscli.New(rediscli.CLUSTER_MODE, redisHost, maxConn,
 		redis.DialReadTimeout(1*time.Second),
 		redis.DialWriteTimeout(1*time.Second),
-		redis.DialConnectTimeout(1*time.Second))
+		redis.DialConnectTimeout(5*time.Second))
 	rbc := redispipeline.NewRedisPipeline(client, maxIntervalInMs, maxCommandsBatch)
 
 	var requestTimeout uint64
