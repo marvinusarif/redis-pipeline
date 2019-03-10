@@ -179,47 +179,55 @@ func (c *Cluster) InitClusterRegistry() (err error) {
 }
 
 func (c *Cluster) initClusterRegistry() error {
-	masterIPs := c.GetMasterIPs()
-	for _, masterIP := range masterIPs {
-		slotMaps, err := c.getClusterSlotMaps(masterIP)
-		c.mu.Lock()
-		if err != nil {
-			c.isUpdatingCluster = false
-			c.mu.Unlock()
-			return err
-		}
-		//reinit masters and slaves
-		c.masterBySlaveIPs, c.slaveByMasterIPs = make(map[string]string), make(map[string][]string)
-		for _, slotMap := range slotMaps {
-			for i, node := range slotMap.nodes {
-				if i == 0 {
-					if len(slotMap.nodes) > 1 {
-						c.slaveByMasterIPs[node] = slotMap.nodes[1:]
+	allIPs := c.GetMasterIPs()
+	allIPs = append(allIPs, c.GetSlaveIPs()...)
+	for _, nodeIP := range allIPs {
+		slotMaps, err := c.getClusterSlotMaps(nodeIP)
+		if err == nil {
+			c.mu.Lock()
+			//reinit masters and slaves
+			c.masterBySlaveIPs, c.slaveByMasterIPs = make(map[string]string), make(map[string][]string)
+			for _, slotMap := range slotMaps {
+				for i, node := range slotMap.nodes {
+					if i == 0 {
+						if len(slotMap.nodes) > 1 {
+							c.slaveByMasterIPs[node] = slotMap.nodes[1:]
+						} else {
+							c.slaveByMasterIPs[node] = nil
+						}
 					} else {
-						c.slaveByMasterIPs[node] = nil
+						c.masterBySlaveIPs[node] = slotMap.nodes[0]
 					}
-				} else {
-					c.masterBySlaveIPs[node] = slotMap.nodes[0]
+				}
+				//map slot map to addresSlots
+				for i := slotMap.lowerBoundSlot; i <= slotMap.upperBoundSlot; i++ {
+					c.addrSlots[i] = slotMap.nodes
 				}
 			}
-			//map slot map to addresSlots
-			for i := slotMap.lowerBoundSlot; i <= slotMap.upperBoundSlot; i++ {
-				c.addrSlots[i] = slotMap.nodes
+
+			//remove all connection from clusters
+			for masterIP, slaveIPs := range c.slaveByMasterIPs {
+				if p := c.poolByAddr[masterIP]; p != nil {
+					p.Close()
+					delete(c.poolByAddr, masterIP)
+				}
+				for _, slaveIP := range slaveIPs {
+					if p := c.poolByAddr[slaveIP]; p != nil {
+						p.Close()
+						delete(c.poolByAddr, slaveIP)
+					}
+				}
 			}
+			//set false on Refresh
+			c.isUpdatingCluster = false
+			c.mu.Unlock()
+			// go c.printNodes()
+			return nil
 		}
-		//remove all non active nodes from clusters
-		for masterIP, _ := range c.slaveByMasterIPs {
-			if p := c.poolByAddr[masterIP]; p != nil {
-				p.Close()
-				delete(c.poolByAddr, masterIP)
-			}
-		}
-		//set false on Refresh
-		c.isUpdatingCluster = false
-		c.mu.Unlock()
-		// go c.printNodes()
-		return nil
 	}
+	c.mu.Lock()
+	c.isUpdatingCluster = false
+	c.mu.Unlock()
 	return fmt.Errorf("all nodes is down")
 }
 
@@ -239,8 +247,8 @@ func (c *Cluster) updateClusterRegistry(redirectionError *RedirError) {
 }
 
 func (c *Cluster) GetMasterIPs() (masterIPs []string) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 	for masterIP := range c.slaveByMasterIPs {
 		masterIPs = append(masterIPs, masterIP)
 	}
@@ -248,8 +256,8 @@ func (c *Cluster) GetMasterIPs() (masterIPs []string) {
 }
 
 func (c *Cluster) GetSlaveIPs() (slaveIPs []string) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 	for slaveIP := range c.masterBySlaveIPs {
 		slaveIPs = append(slaveIPs, slaveIP)
 	}
