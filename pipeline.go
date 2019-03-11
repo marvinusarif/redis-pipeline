@@ -2,6 +2,7 @@ package redispipeline
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -187,6 +188,8 @@ func (rb *RedisPipelineImpl) flush(host string, sessions []*Session) {
 				} else {
 					sentSessions = append(sentSessions, session)
 				}
+			} else {
+				go session.reply(nil, errors.New("process is forced to stop due to context deadline or unavailable node"))
 			}
 		}
 	}
