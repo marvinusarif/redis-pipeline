@@ -32,7 +32,6 @@ func main() {
 
 	redisHost := "localhost:30008"
 	maxConn := 100
-	contextTimeout := 300
 	maxIntervalInMs := uint64(10)
 	maxCommandsBatch := uint64(100)
 
@@ -42,6 +41,25 @@ func main() {
 		redis.DialWriteTimeout(1*time.Second),
 		redis.DialConnectTimeout(1*time.Second))
 	rb := redispipeline.NewRedisPipeline(client, maxIntervalInMs, maxCommandsBatch)
+
+	//ticker
+	ticker := time.NewTicker(1000 * time.Millisecond)
+	// create term so the app didn't exit
+	term := make(chan os.Signal, 1)
+	signal.Notify(term, os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
+	for {
+		select {
+		case <-ticker.C:
+			Do(rb)
+		case <-term:
+			fmt.Println("terminate app")
+			return
+		}
+	}
+}
+
+func Do(rb redispipeline.RedisPipeline) {
+	contextTimeout := 300
 	/*
 		simulates concurrent rps
 	*/
@@ -128,14 +146,6 @@ func main() {
 	fmt.Println("timeout requests on GET :", requestTimeout)
 	fmt.Println(time.Since(now))
 	fmt.Println("ending GET session")
-
-	// create term so the app didn't exit
-	term := make(chan os.Signal, 1)
-	signal.Notify(term, os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
-	select {
-	case <-term:
-		fmt.Println("terminate app")
-	}
 }
 
 func multiExecRedis(ctx context.Context, rb redispipeline.RedisPipeline, i string) error {

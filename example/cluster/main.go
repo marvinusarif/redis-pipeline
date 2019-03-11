@@ -32,7 +32,6 @@ func main() {
 
 	redisHost := "127.0.0.1:30001;127.0.0.1:30002;127.0.0.1:30003;127.0.0.1:30004;127.0.0.1:30005;127.0.0.1:30006"
 	maxConn := 100
-	contextTimeout := 300
 	maxIntervalInMs := uint64(10)
 	maxCommandsBatch := uint64(100)
 
@@ -42,6 +41,24 @@ func main() {
 		redis.DialConnectTimeout(5*time.Second))
 	rbc := redispipeline.NewRedisPipeline(client, maxIntervalInMs, maxCommandsBatch)
 
+	//NewTicker
+	ticker := time.NewTicker(1000 * time.Millisecond)
+	// create term so the app didn't exit
+	term := make(chan os.Signal, 1)
+	signal.Notify(term, os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
+	for {
+		select {
+		case <-ticker.C:
+			Do(rbc)
+		case <-term:
+			fmt.Println("terminate app")
+			return
+		}
+	}
+}
+
+func Do(rbc redispipeline.RedisPipeline) {
+	contextTimeout := 300
 	var requestTimeout uint64
 	requests := 3000
 	redisJobPerRequest := 4
@@ -121,13 +138,7 @@ func main() {
 	fmt.Println("timeout requests on GET FROM SLAVE :", requestTimeout)
 	fmt.Println(time.Since(now))
 	fmt.Println("ending GET from slave session")
-	// create term so the app didn't exit
-	term := make(chan os.Signal, 1)
-	signal.Notify(term, os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
-	select {
-	case <-term:
-		fmt.Println("terminate app")
-	}
+
 }
 
 func getKeyFromRedis(ctx context.Context, rb redispipeline.RedisPipeline, i string) error {
