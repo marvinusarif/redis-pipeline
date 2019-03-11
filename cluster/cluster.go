@@ -3,6 +3,7 @@ package cluster
 import (
 	"errors"
 	"fmt"
+	"log"
 	"sync"
 	"time"
 
@@ -29,6 +30,7 @@ type Cluster struct {
 	CreatePool        func(host string, maxConn int, dialOption ...redis.DialOption) *redis.Pool
 	masterBySlaveIPs  map[string]string
 	slaveByMasterIPs  map[string][]string
+	nodes             map[string]bool
 	poolByAddr        map[string]*redis.Pool
 	addrSlots         [][]string
 	isUpdatingCluster bool
@@ -39,7 +41,7 @@ type SlotMap struct {
 	nodes                          []string
 }
 
-func New(masterIPs []string, maxConn int, createPool func(host string, maxConn int, dialOption ...redis.DialOption) *redis.Pool, dialOption ...redis.DialOption) ClusterInterface {
+func New(allIPs []string, maxConn int, createPool func(host string, maxConn int, dialOption ...redis.DialOption) *redis.Pool, dialOption ...redis.DialOption) ClusterInterface {
 	cluster := &Cluster{
 		mu:                &sync.RWMutex{},
 		maxConn:           maxConn,
@@ -48,14 +50,22 @@ func New(masterIPs []string, maxConn int, createPool func(host string, maxConn i
 		masterBySlaveIPs:  make(map[string]string),
 		slaveByMasterIPs:  make(map[string][]string),
 		poolByAddr:        make(map[string]*redis.Pool),
+		nodes:             make(map[string]bool),
 		addrSlots:         make([][]string, totalSlots),
 		isUpdatingCluster: false,
 	}
 	//initialize node with masters
-	for _, masterIP := range masterIPs {
-		cluster.slaveByMasterIPs[masterIP] = nil
+	for _, nodeIP := range allIPs {
+		//set all nodes as master, we don't know the master/slave yet
+		cluster.slaveByMasterIPs[nodeIP] = nil
+		//set all nodes to up, we don't know yet
+		cluster.nodes[nodeIP] = true
 	}
-	cluster.InitClusterRegistry()
+
+	if err := cluster.InitClusterRegistry(); err != nil {
+		log.Println(err)
+		panic("cannot init redis cluster")
+	}
 	return cluster
 }
 
@@ -158,6 +168,14 @@ func (c *Cluster) GetNodeIPBySlot(slot int, readOnly bool) (nodeIP string, err e
 
 // getConnFromAddr ...
 func (c *Cluster) GetConnByAddr(addr string) (conn redis.Conn, isReadOnly bool, err error) {
+	// check if node is alive
+	c.mu.RLock()
+	if _, ok := c.nodes[addr]; !ok {
+		c.mu.RUnlock()
+		return nil, false, fmt.Errorf("node %s is down", addr)
+	}
+	c.mu.RUnlock()
+
 	isReadOnly = c.isNodeReadOnly(addr)
 	pool := c.getOrCreatePool(addr)
 	conn = pool.Get()
@@ -179,14 +197,14 @@ func (c *Cluster) InitClusterRegistry() (err error) {
 }
 
 func (c *Cluster) initClusterRegistry() error {
-	allIPs := c.GetMasterIPs()
-	allIPs = append(allIPs, c.GetSlaveIPs()...)
+	allIPs := c.GetSlaveIPs()
+	allIPs = append(allIPs, c.GetMasterIPs()...)
 	for _, nodeIP := range allIPs {
 		slotMaps, err := c.getClusterSlotMaps(nodeIP)
 		if err == nil {
 			c.mu.Lock()
-			//reinit masters and slaves
-			c.masterBySlaveIPs, c.slaveByMasterIPs = make(map[string]string), make(map[string][]string)
+			//reinit nodes, masters and slaves
+			c.nodes, c.masterBySlaveIPs, c.slaveByMasterIPs = make(map[string]bool), make(map[string]string), make(map[string][]string)
 			for _, slotMap := range slotMaps {
 				for i, node := range slotMap.nodes {
 					if i == 0 {
@@ -197,6 +215,9 @@ func (c *Cluster) initClusterRegistry() error {
 						}
 					} else {
 						c.masterBySlaveIPs[node] = slotMap.nodes[0]
+					}
+					if ok := c.nodes[node]; !ok {
+						c.nodes[node] = true
 					}
 				}
 				//map slot map to addresSlots
@@ -222,6 +243,8 @@ func (c *Cluster) initClusterRegistry() error {
 			c.isUpdatingCluster = false
 			c.mu.Unlock()
 			// go c.printNodes()
+			// go c.printNodesAvailability()
+			// go c.printSlots()
 			return nil
 		}
 	}
@@ -297,7 +320,24 @@ func (c *Cluster) GetMasterFromSlaveIP(slaveIP string) (masterIP string, err err
 	}
 	return masterIP, nil
 }
+func (c *Cluster) printSlots() {
+	c.mu.RLock()
+	addrSlots := c.addrSlots
+	c.mu.RUnlock()
+	for i, ips := range addrSlots {
+		fmt.Printf("%d node : %v", i, ips)
+	}
+}
 
+func (c *Cluster) printNodesAvailability() {
+	fmt.Println("Cluster Availability")
+	c.mu.RLock()
+	nodes := c.nodes
+	c.mu.RUnlock()
+	for node := range nodes {
+		fmt.Println(node)
+	}
+}
 func (c *Cluster) printNodes() {
 	fmt.Println("Reinit Cluster Registry")
 	fmt.Println("master IPs :", c.GetMasterIPs())
