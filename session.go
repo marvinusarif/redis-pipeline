@@ -3,6 +3,7 @@ package redispipeline
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 )
 
@@ -104,8 +105,14 @@ func (ps *RedisPipelineSessionImpl) Execute() ([]*CommandResponse, error) {
 	for nodeIP, sess := range ps.session {
 		//set up response channel to same with other session
 		sess.responseChan = ps.sessionResponseChan
-		//session should be distributed to responsible node
-		go ps.pipelineHub.sendToPipelineHub(nodeIP, sess)
+		if _, ok := ps.pipelineHub.nodes[nodeIP]; !ok {
+			if sess.status.stopProcessIfAllowed() {
+				go sess.reply(nil, fmt.Errorf("node %s is down", nodeIP))
+			}
+		} else {
+			//session should be distributed to responsible node
+			go ps.pipelineHub.sendToPipelineHub(nodeIP, sess)
+		}
 	}
 
 	return ps.waitResponse()
