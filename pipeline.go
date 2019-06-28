@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	redis "github.com/redis-pipeline/client"
+	redis "github.com/redis-pipeline-v2/client"
 )
 
 const (

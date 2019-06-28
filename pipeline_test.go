@@ -8,7 +8,7 @@ import (
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	. "github.com/redis-pipeline"
+	. "github.com/redis-pipeline-v2"
 	redisClient "github.com/redis-pipeline/client"
 	mocks "github.com/redis-pipeline/mocks"
 	"github.com/stretchr/testify/mock"
