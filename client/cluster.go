@@ -1,82 +1,54 @@
-package redisadapter
+package redisclient
 
 import (
-	"errors"
-	"strings"
-	"sync"
-	"time"
-
-	rc "github.com/chasex/redis-go-cluster"
-	"github.com/google/uuid"
+	"github.com/gomodule/redigo/redis"
+	rclib "github.com/redis-pipeline/cluster"
 )
 
-// RedisClusterClientImpl implementation of redis client for cluster mode
-type RedisClusterClientImpl struct {
-	mu      *sync.RWMutex
+type RedisClusterV2ClientImpl struct {
 	mode    int
-	host    string
+	host    []string
 	maxConn int
-	batches map[string]*rc.Batch
-	cluster *rc.Cluster
+	cluster rclib.ClusterInterface
 }
 
-func createCluster(host string, maxConn int) *rc.Cluster {
-	startNodes := strings.FieldsFunc(strings.Replace(host, " ", "", -1), func(r rune) bool {
-		return r == ';' || r == ','
-	})
-	cluster, err := rc.NewCluster(&rc.Options{
-		StartNodes:   startNodes,
-		ConnTimeout:  5 * time.Second,
-		ReadTimeout:  3 * time.Second,
-		WriteTimeout: 3 * time.Second,
-		KeepAlive:    maxConn,
-		AliveTime:    8 * time.Second,
-	})
-	if err != nil {
-		panic("redis cluster panic!")
-	}
-	return cluster
+// GetHosts get hosts of client
+func (c *RedisClusterV2ClientImpl) GetHosts() ([]string, []string) {
+	masters := c.cluster.GetMasterIPs()
+	slaves := c.cluster.GetSlaveIPs()
+	return masters, slaves
 }
 
-// GetMaxConn Return Redis Cluster Max Connection Pool for each node
-func (c *RedisClusterClientImpl) GetMaxConn() int {
+func (c *RedisClusterV2ClientImpl) GetMaxConn() int {
 	return c.maxConn
 }
 
-// NewBatch Init New Batch of Commands
-func (c *RedisClusterClientImpl) NewBatch() string {
-	name := uuid.New().String()
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if _, ok := c.batches[name]; !ok {
-		c.batches[name] = c.cluster.NewBatch()
+func (c *RedisClusterV2ClientImpl) GetConn(host string) (conn redis.Conn, isReadOnly bool, err error) {
+	conn, isReadOnly, err = c.cluster.GetConnByAddr(host)
+	if err != nil {
+		return nil, isReadOnly, err
 	}
-	return name
+	return conn, isReadOnly, nil
 }
 
-// RunBatch Run Commands in Single Batch
-func (c *RedisClusterClientImpl) RunBatch(name string) ([]interface{}, error) {
-	c.mu.RLock()
-	if _, ok := c.batches[name]; !ok {
-		return nil, errors.New("batch name not found")
+func (c *RedisClusterV2ClientImpl) GetConnWithTimeout(host string) (cwt redis.ConnWithTimeout, isReadOnly bool, err error) {
+	conn, isReadOnly, err := c.cluster.GetConnByAddr(host)
+	cwt, ok := conn.(redis.ConnWithTimeout)
+	if !ok {
+		return nil, isReadOnly, errTimeoutNotSupported
 	}
-	batch := c.batches[name]
-	c.mu.RUnlock()
-	reply, err := c.cluster.RunBatch(batch)
-
-	c.deleteBatch(name)
-	return reply, err
+	return cwt, isReadOnly, nil
 }
 
-// Send send command to batch
-func (c *RedisClusterClientImpl) Send(name string, cmd string, args ...interface{}) error {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.batches[name].Put(cmd, args...)
+func (c *RedisClusterV2ClientImpl) GetNodeIPByKey(key string, readOnly bool) (string, error) {
+	slot := c.cluster.Slot(key)
+	return c.cluster.GetNodeIPBySlot(slot, readOnly)
 }
 
-func (c *RedisClusterClientImpl) deleteBatch(name string) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	delete(c.batches, name)
+func (c *RedisClusterV2ClientImpl) GetMasterFromSlaveIP(slaveIP string) (string, error) {
+	return c.cluster.GetMasterFromSlaveIP(slaveIP)
+}
+
+func (c *RedisClusterV2ClientImpl) HandleError(err error) {
+	c.cluster.HandleError(err)
 }

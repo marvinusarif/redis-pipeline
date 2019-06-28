@@ -51,3 +51,22 @@ func (_m *RedisPipelineSession) PushCommand(command string, args ...interface{})
 
 	return r0
 }
+
+// PushCommandReadOnly provides a mock function with given fields: command, args
+func (_m *RedisPipelineSession) PushCommandReadOnly(command string, args ...interface{}) redispipeline.RedisPipelineSession {
+	var _ca []interface{}
+	_ca = append(_ca, command)
+	_ca = append(_ca, args...)
+	ret := _m.Called(_ca...)
+
+	var r0 redispipeline.RedisPipelineSession
+	if rf, ok := ret.Get(0).(func(string, ...interface{}) redispipeline.RedisPipelineSession); ok {
+		r0 = rf(command, args...)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(redispipeline.RedisPipelineSession)
+		}
+	}
+
+	return r0
+}

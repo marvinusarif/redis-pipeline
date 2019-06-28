@@ -11,16 +11,17 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/gomodule/redigo/redis"
 	"github.com/google/gops/agent"
-	redispipeline "github.com/redis-pipeline-v2"
-	redis "github.com/redis-pipeline/client"
+	redispipeline "github.com/redis-pipeline"
+	rediscli "github.com/redis-pipeline/client"
 )
 
 func main() {
 	/*
 		Warning :
 			Redis Pipeline is useful for retrieving data or updating data in batch. This library is intended to execute as much commands as possible in single round trip time.
-			if the pipeline session is timedout then all commands in the session won't get executed. If the timeout is not reached when all commands sent to redis server,
+			if the pipeline session is timeout then all commands in the session won't get executed. If the timeout is not reached when all commands sent to redis server,
 			it would wait until the response get returned from redis.
 	*/
 	//gops!
@@ -30,11 +31,35 @@ func main() {
 	log.SetFlags(log.Llongfile | log.Ldate | log.Ltime)
 
 	redisHost := "localhost:30008"
-	maxConn := 2000
+	maxConn := 100
+	maxIntervalInMs := uint64(10)
 	maxCommandsBatch := uint64(100)
 
-	client := redis.New(redis.SINGLE_MODE, redisHost, maxConn)
-	rb := redispipeline.NewRedisPipeline(client, maxCommandsBatch)
+	client := rediscli.New(rediscli.SINGLE_MODE, redisHost,
+		maxConn,
+		redis.DialReadTimeout(1*time.Second),
+		redis.DialWriteTimeout(1*time.Second),
+		redis.DialConnectTimeout(1*time.Second))
+	rb := redispipeline.NewRedisPipeline(client, maxIntervalInMs, maxCommandsBatch)
+
+	//ticker
+	ticker := time.NewTicker(1000 * time.Millisecond)
+	// create term so the app didn't exit
+	term := make(chan os.Signal, 1)
+	signal.Notify(term, os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
+	for {
+		select {
+		case <-ticker.C:
+			Do(rb)
+		case <-term:
+			fmt.Println("terminate app")
+			return
+		}
+	}
+}
+
+func Do(rb redispipeline.RedisPipeline) {
+	contextTimeout := 300
 	/*
 		simulates concurrent rps
 	*/
@@ -49,13 +74,12 @@ func main() {
 		wg.Add(1)
 		go func(x int) {
 			defer wg.Done()
-			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(1000)*time.Millisecond)
+			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(contextTimeout)*time.Millisecond)
 			defer cancel()
 			var requestTimeoutError error
 			for y := 1; y <= redisJobPerRequest; y++ {
 				err := setKeyToRedis(ctx, rb, fmt.Sprintf("%d%d", x, y))
 				if err != nil {
-					log.Println(err)
 					requestTimeoutError = err
 				}
 			}
@@ -77,13 +101,12 @@ func main() {
 		wg.Add(1)
 		go func(x int) {
 			defer wg.Done()
-			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(1000)*time.Millisecond)
+			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(contextTimeout)*time.Millisecond)
 			defer cancel()
 			var requestTimeoutError error
 			for y := 1; y <= redisJobPerRequest; y++ {
 				err := setKeyToRedis(ctx, rb, fmt.Sprintf("%d%d", x, y))
 				if err != nil {
-					log.Println(err)
 					requestTimeoutError = err
 				}
 			}
@@ -105,13 +128,12 @@ func main() {
 		wg.Add(1)
 		go func(x int) {
 			defer wg.Done()
-			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(1000)*time.Millisecond)
+			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(contextTimeout)*time.Millisecond)
 			defer cancel()
 			var requestTimeoutError error
 			for y := 1; y <= redisJobPerRequest; y++ {
 				err := getKeyFromRedis(ctx, rb, fmt.Sprintf("%d%d", x, y))
 				if err != nil {
-					log.Println(err)
 					requestTimeoutError = err
 				}
 			}
@@ -124,14 +146,6 @@ func main() {
 	fmt.Println("timeout requests on GET :", requestTimeout)
 	fmt.Println(time.Since(now))
 	fmt.Println("ending GET session")
-
-	// create term so the app didn't exit
-	term := make(chan os.Signal, 1)
-	signal.Notify(term, os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
-	select {
-	case <-term:
-		fmt.Println("terminate app")
-	}
 }
 
 func multiExecRedis(ctx context.Context, rb redispipeline.RedisPipeline, i string) error {
